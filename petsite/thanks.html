@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mensagem enviada</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <section class="section container" style="min-height:60vh;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center">
+    <h1 data-thanks="title">Obrigado! 🎉</h1>
+    <p data-thanks="message">Recebemos sua mensagem. Em breve entraremos em contato.</p>
+    <p><a class="btn" data-thanks="back-button" href="/">Voltar</a></p>
+  </section>
+  <script src="config.js"></script>
+  <script>
+    (function () {
+      var config = window.SITE_CONFIG || {};
+      var brand = config.brand || {};
+      var brandPieces = [];
+      if (brand.primary) brandPieces.push(brand.primary);
+      if (brand.secondary) brandPieces.push(brand.secondary);
+      var brandName = brandPieces.join(" ").trim();
+      if (!brandName && brand.short) brandName = brand.short;
+      if (!brandName && config.siteName) brandName = config.siteName;
+
+      var thankYou = config.thankYouPage || {};
+
+      var defaultTitle = "Obrigado! 🎉";
+      var defaultMessage = brandName
+        ? "Recebemos sua mensagem. A equipe " + brandName + " falará com você em breve."
+        : "Recebemos sua mensagem. Em breve entraremos em contato.";
+      var defaultButtonLabel = "Voltar para o site";
+      var defaultButtonHref = "/";
+
+      var titleEl = document.querySelector('[data-thanks="title"]');
+      var messageEl = document.querySelector('[data-thanks="message"]');
+      var buttonEl = document.querySelector('[data-thanks="back-button"]');
+
+      if (titleEl) {
+        var titleText = thankYou.title || defaultTitle;
+        titleEl.textContent = titleText;
+        if (titleText) {
+          var pageTitle = brandName ? titleText + " • " + brandName : titleText;
+          document.title = pageTitle;
+        }
+      }
+
+      if (messageEl) {
+        messageEl.textContent = thankYou.message || defaultMessage;
+      }
+
+      if (buttonEl) {
+        buttonEl.textContent = thankYou.backButtonLabel || defaultButtonLabel;
+        var hrefValue = thankYou.backButtonHref || defaultButtonHref;
+        if (hrefValue) {
+          buttonEl.setAttribute("href", hrefValue);
+        }
+      }
+    })();
+  </script>
+</body>
+</html>

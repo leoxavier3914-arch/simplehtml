@@ -1,0 +1,76 @@
+
+TUTORIAL (PASSO A PASSO) — LANDING PETSHOP (SEM PROGRAMAR)
+
+O QUE VOCÊ COMPROU
+- Uma “página de vendas” pronta. Você só vai trocar textos, telefone, endereço, fotos e publicar.
+- Não precisa instalar nada. É só editar 1 arquivo (config.js) e arrastar a pasta pra internet.
+
+ARQUIVOS IMPORTANTES
+- config.js → onde você coloca seu nome, WhatsApp, endereço, horários, redes, e escolhe como o formulário funciona.
+- assets/images/logo.png → seu logo (PNG com fundo transparente de preferência).
+- assets/images/gallery/ → suas fotos (veja tamanhos abaixo).
+
+TAMANHOS RECOMENDADOS
+- Logo (assets/images/logo.png): 640×180 px (ou semelhante / horizontal). PNG com fundo transparente fica lindo.
+- Foto de capa (HERO): já vem pronta no modelo. Se quiser trocar, crie assets/images/hero.jpg com 1920×1280 px.
+- Galeria: gallery-1.jpg até gallery-8.jpg com 1200×1200 px cada (ou 4:5 se preferir).
+
+PASSO 1 — EDITAR CONFIG.JS
+1. Abra o arquivo config.js (pode ser no Bloco de Notas mesmo).
+2. No topo altere os dados gerais:
+   - siteName e brand.primary/secondary → como o nome aparece no cabeçalho e rodapé
+   - theme → personalize as cores (ex.: primary `#2aba8a`, secondary `#a5e2c8`, background `#0f1f14`). Use valores em hexadecimal (`#RRGGBB` ou `#RRGGBBAA` para transparência).
+     • Garanta contraste mínimo de 4.5:1 entre background/backgroundAccent e text/textSoft para manter boa leitura.
+   - whatsappNumber → coloque só números (DDI + DDD + número), ex.: 5511999999999
+   - addressHtml → endereço (aceita <br/> para quebrar linha)
+   - openingHours → dias e horários da sua operação
+3. Logo abaixo edite cada bloco de conteúdo:
+   - navigation → textos e links do menu/CTA (adicione ou remova itens no array `links` e eles aparecem automaticamente no menu desktop, mobile e rodapé; o CTA segue `navigation.cta`)
+   - hero → título, destaque, botões, badges e formulário da oferta
+   - services, plans, testimonials, gallery, faq → títulos e listas dos cards
+   - contact → opções do formulário, botões e badges
+   - thankYouPage → título, mensagem e botão da página de confirmação (thanks.html)
+   - footer → texto legal e links do rodapé
+   - **Quer remover uma seção inteira?** Basta colocar `enabled: false` nos blocos `hero.promo`, `services`, `plans`, `testimonials`, `gallery`, `faq` ou `contact` e ela some automaticamente do site.
+4. Redes sociais: preencha social.instagram / social.tiktok para mostrar os ícones no rodapé. Se deixar vazio, o respectivo link desaparece automaticamente.
+5. Formulário: form.provider define como você recebe ("whatsapp", "netlify", "formspree" ou "emailjs").
+6. (Opcional) pixels → GA4, Facebook e TikTok (cole seus códigos para medir visitas).
+7. (Opcional) seo → título da aba, descrição e imagem para redes sociais (ogImage 1200×630).
+
+PASSO 2 — TROCAR LOGO E FOTOS (OPCIONAL)
+- Já existem placeholders leves nesses caminhos. Só substituir pelos seus arquivos finais.
+- Logo: coloque seu arquivo em assets/images/logo.png. Pronto.
+- Capa (hero): se quiser, coloque assets/images/hero.jpg (1920×1280). A página detecta e troca sozinha.
+- Galeria: coloque suas fotos em assets/images/gallery/gallery-1.jpg … gallery-8.jpg (quanto mais melhor).
+  Dica: use JPG com qualidade ~80 para carregar rápido.
+
+PASSO 3 — ESCOLHER COMO RECEBER CONTATOS (form.provider no config.js)
+- "whatsapp" (RECOMENDADO): ao enviar, o cliente abre conversa no seu WhatsApp com a mensagem pronta.
+- "netlify": publique no Netlify (https://app.netlify.com). O formulário aparece no painel do Netlify. A página de sucesso é thanks.html.
+  Personalize `thankYouPage` no `config.js` para mostrar sua mensagem e link de retorno.
+- "formspree": crie um formulário grátis em https://formspree.io e copie o “endpoint” para config.js.
+- "emailjs": exige conta no EmailJS e chave pública. Mostramos um aviso até você plugar o SDK.
+
+PASSO 4 — PUBLICAR GRÁTIS
+- Netlify (mais fácil): entre em app.netlify.com → “Add new site” → “Deploy manually” → arraste a pasta inteira da landing.
+- Vercel: vercel.com → “Add New…” → “Project” → “Other” → arraste a pasta.
+- GitHub Pages: crie um repositório com os arquivos e ative “Pages” (branch main).
+- Cloudflare Pages: crie um projeto e suba a pasta.
+Depois, você pode colocar seu domínio (ex.: meupetshop.com.br) seguindo o passo a passo da plataforma.
+
+PASSO 5 — TESTAR
+- Clique no botão “Agendar” → deve abrir WhatsApp (se escolheu “whatsapp”).
+- Se escolheu “netlify”/“formspree”, faça um envio de teste e veja se chegou.
+- Troque fotos e recarregue a página para ver a Galeria atualizada.
+
+FAQ RÁPIDA
+- “Meu número de WhatsApp não abre?” → Verifique se o número no config.js tem só dígitos (com DDI + DDD).
+- “Minhas fotos não aparecem?” → Confirme os nomes dos arquivos e pastas (gallery-1.jpg, etc.).
+- “Quero mudar cores” → Fica em style.css, mas se não quiser mexer em código, podemos oferecer uma versão pronta com outra paleta.
+- “Posso usar meu domínio?” → Sim. Dentro da plataforma (Netlify, Vercel…) tem a opção “Domínios”.
+
+PRONTO! QUALQUER DÚVIDA, REVEJA ESTE TUTORIAL E O README.
+Bom lançamento! 🐾
+
+IMPORTANTE (LOGO FALLBACK)
+- Se NÃO houver arquivo assets/images/logo.png, o cabeçalho usa o NOME em texto automaticamente (nada quebra).
