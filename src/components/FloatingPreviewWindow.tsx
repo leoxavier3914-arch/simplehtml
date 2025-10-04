@@ -7,10 +7,16 @@ interface FloatingPreviewWindowProps {
   onClose: () => void;
 }
 
+const MIN_WIDTH = 320;
+const MIN_HEIGHT = 240;
+
 export function FloatingPreviewWindow({ title, onClose, children }: PropsWithChildren<FloatingPreviewWindowProps>) {
   const [position, setPosition] = useState({ x: 80, y: 80 });
   const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [size, setSize] = useState({ width: 560, height: 640 });
   const dragOffset = useRef({ x: 0, y: 0 });
+  const resizeStart = useRef({ x: 0, y: 0, width: 560, height: 640 });
   const container = useMemo(() => document.createElement("div"), []);
   const windowRef = useRef<HTMLDivElement | null>(null);
 
@@ -23,24 +29,44 @@ export function FloatingPreviewWindow({ title, onClose, children }: PropsWithChi
 
   useEffect(() => {
     function handleMouseMove(event: MouseEvent) {
-      if (!isDragging) return;
-      const bounds = windowRef.current?.getBoundingClientRect();
-      const width = bounds?.width ?? 0;
-      const height = bounds?.height ?? 0;
-      const maxX = window.innerWidth - width;
-      const maxY = window.innerHeight - height;
+      if (isDragging) {
+        const bounds = windowRef.current?.getBoundingClientRect();
+        const width = bounds?.width ?? size.width;
+        const height = bounds?.height ?? size.height;
+        const maxX = window.innerWidth - width;
+        const maxY = window.innerHeight - height;
 
-      const nextX = event.clientX - dragOffset.current.x;
-      const nextY = event.clientY - dragOffset.current.y;
+        const nextX = event.clientX - dragOffset.current.x;
+        const nextY = event.clientY - dragOffset.current.y;
 
-      setPosition({
-        x: Math.min(Math.max(0, nextX), Math.max(0, maxX)),
-        y: Math.min(Math.max(0, nextY), Math.max(0, maxY)),
-      });
+        setPosition({
+          x: Math.min(Math.max(0, nextX), Math.max(0, maxX)),
+          y: Math.min(Math.max(0, nextY), Math.max(0, maxY)),
+        });
+      }
+
+      if (isResizing) {
+        const deltaX = event.clientX - resizeStart.current.x;
+        const deltaY = event.clientY - resizeStart.current.y;
+        const rawWidth = resizeStart.current.width + deltaX;
+        const rawHeight = resizeStart.current.height + deltaY;
+        const maxWidth = Math.max(MIN_WIDTH, window.innerWidth - position.x - 16);
+        const maxHeight = Math.max(MIN_HEIGHT, window.innerHeight - position.y - 16);
+
+        setSize({
+          width: Math.min(Math.max(MIN_WIDTH, rawWidth), maxWidth),
+          height: Math.min(Math.max(MIN_HEIGHT, rawHeight), maxHeight),
+        });
+      }
     }
 
     function handleMouseUp() {
       setIsDragging(false);
+      setIsResizing(false);
+    }
+
+    if (!isDragging && !isResizing) {
+      return;
     }
 
     window.addEventListener("mousemove", handleMouseMove);
@@ -50,7 +76,7 @@ export function FloatingPreviewWindow({ title, onClose, children }: PropsWithChi
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isDragging]);
+  }, [isDragging, isResizing, position.x, position.y, size.height, size.width]);
 
   function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
@@ -65,12 +91,25 @@ export function FloatingPreviewWindow({ title, onClose, children }: PropsWithChi
     };
   }
 
+  function handleResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setIsResizing(true);
+    resizeStart.current = {
+      x: event.clientX,
+      y: event.clientY,
+      width: size.width,
+      height: size.height,
+    };
+  }
+
   return createPortal(
     <div className="floating-window-overlay" role="presentation">
       <div
         ref={windowRef}
-        className={`floating-window ${isDragging ? "dragging" : ""}`}
-        style={{ top: position.y, left: position.x }}
+        className={`floating-window${isDragging ? " dragging" : ""}${isResizing ? " resizing" : ""}`}
+        style={{ top: position.y, left: position.x, width: size.width, height: size.height }}
       >
         <header className="floating-window-title" onPointerDown={handlePointerDown}>
           <span>{title}</span>
@@ -78,7 +117,10 @@ export function FloatingPreviewWindow({ title, onClose, children }: PropsWithChi
             ×
           </button>
         </header>
-        <div className="floating-window-content">{children}</div>
+        <div className="floating-window-content">
+          {children}
+          <div className="floating-window-resize-handle" onPointerDown={handleResizePointerDown} />
+        </div>
       </div>
     </div>,
     container

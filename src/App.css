@@ -254,9 +254,14 @@ main {
   flex: 1;
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: stretch;
   padding: 1rem;
   background: #f8fafc;
+}
+
+.preview.preview-mobile .preview-surface {
+  justify-content: center;
+  align-items: center;
 }
 
 .preview iframe,
@@ -286,8 +291,12 @@ main {
 }
 
 .browser-preview {
-  width: min(100%, 960px);
-  aspect-ratio: 16 / 10;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  flex: 1;
+  align-self: stretch;
   border-radius: 12px;
   border: 1px solid #dbe3f4;
   box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
@@ -355,6 +364,7 @@ main {
 .browser-content {
   flex: 1;
   background: #fff;
+  min-height: 0;
 }
 
 .mobile-preview {
@@ -395,6 +405,8 @@ main {
   position: absolute;
   width: 560px;
   height: 640px;
+  min-width: 320px;
+  min-height: 240px;
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 25px 50px rgba(15, 23, 42, 0.25);
@@ -402,12 +414,16 @@ main {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  resize: both;
   pointer-events: auto;
 }
 
 .floating-window.dragging {
   cursor: grabbing;
+  user-select: none;
+}
+
+.floating-window.resizing {
+  cursor: se-resize;
   user-select: none;
 }
 
@@ -443,6 +459,7 @@ main {
   display: flex;
   flex-direction: column;
   background: #f8fafc;
+  position: relative;
 }
 
 .floating-preview-controls {
@@ -454,10 +471,36 @@ main {
 .floating-preview-surface {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
   padding: 0.75rem 0.9rem 1rem;
   gap: 1rem;
+}
+
+.floating-preview-surface.preview-mobile {
+  align-items: center;
+  justify-content: center;
+}
+
+.floating-window-resize-handle {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  right: 6px;
+  bottom: 6px;
+  border-radius: 4px;
+  background: rgba(37, 99, 235, 0.12);
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  cursor: se-resize;
+}
+
+.floating-window-resize-handle::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-bottom: 2px solid rgba(37, 99, 235, 0.6);
+  border-right: 2px solid rgba(37, 99, 235, 0.6);
+  border-radius: 2px;
 }
 
 .logs {

@@ -15,9 +15,21 @@ export class SimpleTemplateEngine implements TemplateEngine {
 
   async render(files: TemplateFile[], config: TemplateConfig): Promise<RenderedTemplate> {
     const flattened = flattenConfig(config);
+    const fullConfigJson = JSON.stringify(config, null, 2)
+      .replace(/</g, "\\u003C")
+      .replace(/>/g, "\\u003E")
+      .replace(/&/g, "\\u0026")
+      .replace(/\u2028/g, "\\u2028")
+      .replace(/\u2029/g, "\\u2029");
+
+    const placeholders = {
+      ...flattened,
+      __CONFIG__: fullConfigJson,
+    };
+
     const renderedFiles = files.map((file) => ({
       ...file,
-      contents: this.transformer(file.contents, flattened),
+      contents: this.transformer(file.contents, placeholders),
     }));
 
     return { files: renderedFiles };
