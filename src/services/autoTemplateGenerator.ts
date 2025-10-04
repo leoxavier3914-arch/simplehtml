@@ -1,11 +1,37 @@
 import type { TemplateFile } from "@/core/template";
-import type { SchemaField, SchemaGroup, TemplateSchema } from "@/types/schema";
+import type { SchemaField, SchemaGroup, SchemaTab, TemplateSchema } from "@/types/schema";
 import { setValue } from "@/utils/objectPaths";
 
 interface AutoTemplateResult {
   schema: TemplateSchema;
   config: Record<string, unknown>;
   files: TemplateFile[];
+}
+
+interface TransformResult {
+  contents: string;
+  contentGroups: SchemaGroup[];
+  seoGroups: SchemaGroup[];
+  hasFields: boolean;
+}
+
+interface FieldOwnerContext {
+  id: string;
+  label: string;
+  keyPrefix: string;
+  element: Element | null;
+  fields: SchemaField[];
+  counters: Record<string, number>;
+  order: number;
+  description?: string;
+}
+
+interface SectionContext extends FieldOwnerContext {
+  cards: CardContext[];
+}
+
+interface CardContext extends FieldOwnerContext {
+  parentSectionId: string;
 }
 
 const TEXT_LABELS: Record<string, string> = {
@@ -29,6 +55,95 @@ const SKIP_TEXT_PARENTS = new Set(["script", "style", "noscript", "template"]);
 
 const URL_SKIP_PREFIXES = ["javascript:"];
 
+const SECTION_SELECTORS = [
+  "section",
+  "header",
+  "footer",
+  "main",
+  "nav",
+  "article",
+  "[data-section]",
+  "[data-block]",
+  "[class*='section']",
+  "[class*='hero']",
+  "[class*='header']",
+  "[class*='footer']",
+  "[class*='banner']",
+  "[class*='content']",
+];
+
+const CARD_KEYWORDS = [
+  "card",
+  "item",
+  "feature",
+  "service",
+  "box",
+  "column",
+  "col-",
+  "step",
+  "benefit",
+  "plan",
+  "pricing",
+  "testimonial",
+  "review",
+  "faq",
+  "team",
+  "member",
+  "gallery",
+  "photo",
+  "produto",
+  "product",
+  "servico",
+];
+
+const SECTION_LABEL_HINTS: { pattern: RegExp; label: string }[] = [
+  { pattern: /(hero|masthead|banner)/i, label: "Hero" },
+  { pattern: /(header|topbar|navbar|menu|nav)/i, label: "Navegação" },
+  { pattern: /(footer|rodape|credits)/i, label: "Rodapé" },
+  { pattern: /(contact|contato|form)/i, label: "Contato" },
+  { pattern: /(about|sobre|historia|company)/i, label: "Sobre" },
+  { pattern: /(service|servico|feature|benefit|solucao)/i, label: "Serviços" },
+  { pattern: /(product|produto|catalog)/i, label: "Produtos" },
+  { pattern: /(faq|pergunta|duvida)/i, label: "FAQ" },
+  { pattern: /(testimonial|depoimento|review)/i, label: "Depoimentos" },
+  { pattern: /(pricing|plan|preco|assinatura)/i, label: "Planos" },
+  { pattern: /(cta|call-to-action)/i, label: "Chamadas" },
+  { pattern: /(stats|numero|metric|resultado)/i, label: "Resultados" },
+  { pattern: /(gallery|portfolio|galeria)/i, label: "Galeria" },
+  { pattern: /(team|equipe|staff)/i, label: "Equipe" },
+  { pattern: /(blog|noticia|artigo)/i, label: "Blog" },
+];
+
+const CARD_LABEL_HINTS: { pattern: RegExp; label: string }[] = [
+  { pattern: /(card|item|box|bloco)/i, label: "Card" },
+  { pattern: /(feature|benefit|solucao)/i, label: "Diferencial" },
+  { pattern: /(service|servico)/i, label: "Serviço" },
+  { pattern: /(plan|preco|pricing|assinatura)/i, label: "Plano" },
+  { pattern: /(testimonial|depoimento|review)/i, label: "Depoimento" },
+  { pattern: /(faq|pergunta|duvida)/i, label: "Pergunta" },
+  { pattern: /(step|etapa|process)/i, label: "Etapa" },
+  { pattern: /(team|member|equipe|colaborador)/i, label: "Integrante" },
+  { pattern: /(gallery|photo|imagem|portfolio)/i, label: "Item da galeria" },
+  { pattern: /(produto|product)/i, label: "Produto" },
+];
+
+const TAG_KEY_PREFIX: Record<string, string> = {
+  h1: "title",
+  h2: "subtitle",
+  h3: "heading",
+  h4: "heading",
+  h5: "heading",
+  h6: "heading",
+  p: "paragraph",
+  span: "text",
+  strong: "highlight",
+  em: "highlight",
+  button: "button",
+  a: "linkText",
+  li: "item",
+  label: "label",
+};
+
 export function autoGenerateTemplate(
   templateLabel: string,
   originalFiles: TemplateFile[],
@@ -38,7 +153,8 @@ export function autoGenerateTemplate(
   }
 
   const defaults: Record<string, unknown> = {};
-  const groups: SchemaGroup[] = [];
+  const contentGroups: SchemaGroup[] = [];
+  const seoGroups: SchemaGroup[] = [];
   const processedFiles: TemplateFile[] = [];
   let hasFields = false;
 
@@ -49,18 +165,14 @@ export function autoGenerateTemplate(
     }
 
     const baseKey = `auto.${sanitizeKey(file.path)}`;
-    const result = transformHtmlFile(file.contents, baseKey, defaults);
+    const result = transformHtmlFile(file, baseKey, defaults);
 
     processedFiles.push({ path: file.path, contents: result.contents });
 
-    if (result.fields.length > 0) {
+    if (result.hasFields) {
       hasFields = true;
-      groups.push({
-        id: `auto-${sanitizeKey(file.path)}`,
-        label: displayLabelForFile(file.path),
-        description: "Campos identificados automaticamente a partir do HTML.",
-        fields: result.fields,
-      });
+      contentGroups.push(...result.contentGroups);
+      seoGroups.push(...result.seoGroups);
     }
   });
 
@@ -75,8 +187,10 @@ export function autoGenerateTemplate(
       {
         id: "auto-content",
         label: "Conteúdo",
-        groups,
+        groups: contentGroups,
       },
+      ...buildSeoTabs(seoGroups),
+      buildIntegrationsTab(),
     ],
   };
 
@@ -84,26 +198,32 @@ export function autoGenerateTemplate(
 }
 
 function transformHtmlFile(
-  contents: string,
+  file: TemplateFile,
   baseKey: string,
   defaults: Record<string, unknown>,
-): { contents: string; fields: SchemaField[] } {
+): TransformResult {
   const parser = new DOMParser();
+  const contents = file.contents;
   const trimmed = contents.trim();
   const isFragment = !/<html[\s>]/i.test(trimmed);
   const htmlToParse = isFragment ? `<body>${contents}</body>` : contents;
   const doc = parser.parseFromString(htmlToParse, "text/html");
 
   if (!doc || doc.querySelector("parsererror")) {
-    return { contents, fields: [] };
+    return { contents, contentGroups: [], seoGroups: [], hasFields: false };
   }
 
   const root: Element | null = isFragment ? doc.body : doc.documentElement;
   if (!root) {
-    return { contents, fields: [] };
+    return { contents, contentGroups: [], seoGroups: [], hasFields: false };
   }
 
-  const fields: SchemaField[] = [];
+  const seoFields: SchemaField[] = [];
+  const sectionContexts: SectionContext[] = [];
+  const sectionMap = new Map<Element, SectionContext>();
+  const sectionKeySet = new Set<string>();
+  const cardKeySet = new Set<string>();
+  const cardMap = new Map<Element, CardContext>();
 
   // Meta tags first (SEO)
   const metaElements = Array.from(doc.querySelectorAll("meta[name][content]"));
@@ -123,7 +243,7 @@ function transformHtmlFile(
       helperText: "Conteúdo da tag <meta>",
     };
 
-    fields.push(field);
+    seoFields.push(field);
     setValue(key, defaults, value);
     meta.setAttribute("content", `{{${key}}}`);
   });
@@ -131,7 +251,6 @@ function transformHtmlFile(
   // Text nodes
   const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let current = walker.nextNode();
-  let textIndex = 0;
 
   while (current) {
     const node = current as Text;
@@ -159,17 +278,36 @@ function transformHtmlFile(
       continue;
     }
 
-    textIndex += 1;
-    const key = `${baseKey}.text${textIndex}`;
+    const section = getSectionContext(parent, {
+      sectionMap,
+      sectionKeySet,
+      sectionContexts,
+      baseKey,
+      file,
+    });
+    const card = getCardContext(parent, section, {
+      cardKeySet,
+      cardMap,
+    });
+
+    const owner = card ?? section;
+    const { key, index } = buildFieldKey(owner, prefixForTag(tagName));
+    const label = buildFieldLabel({
+      section,
+      card,
+      baseLabel: labelForText(tagName, index, value),
+    });
+    const helperText = buildHelperText(parent, section, card);
+
     const field: SchemaField = {
       key,
-      label: labelForText(tagName, textIndex, value),
+      label,
       type: chooseTextFieldType(tagName, value),
       defaultValue: value,
-      helperText: `Elemento <${tagName}>`,
+      helperText,
     };
 
-    fields.push(field);
+    owner.fields.push(field);
     setValue(key, defaults, value);
 
     const leading = rawText.match(/^\s*/)?.[0] ?? "";
@@ -181,32 +319,46 @@ function transformHtmlFile(
 
   // Image sources
   const imageElements = Array.from(root.querySelectorAll("img[src]"));
-  let imageIndex = 0;
   imageElements.forEach((img) => {
     const src = img.getAttribute("src");
     if (!src) return;
     const value = src.trim();
     if (!value || value.includes("{{")) return;
 
-    imageIndex += 1;
-    const key = `${baseKey}.image${imageIndex}`;
+    const section = getSectionContext(img, {
+      sectionMap,
+      sectionKeySet,
+      sectionContexts,
+      baseKey,
+      file,
+    });
+    const card = getCardContext(img, section, {
+      cardKeySet,
+      cardMap,
+    });
+    const owner = card ?? section;
     const alt = img.getAttribute("alt")?.trim();
+    const { key, index } = buildFieldKey(owner, "image");
+    const helperText = buildHelperText(img, section, card);
     const field: SchemaField = {
       key,
-      label: alt ? `Imagem (${truncateLabel(alt)})` : `Imagem ${imageIndex}`,
+      label: buildFieldLabel({
+        section,
+        card,
+        baseLabel: alt ? `Imagem (${truncateLabel(alt)})` : `Imagem ${index}`,
+      }),
       type: "image",
       defaultValue: value,
-      helperText: alt ? `Atributo alt: ${alt}` : "Atributo src da imagem",
+      helperText: alt ? `${helperText ? `${helperText} · ` : ""}Alt: ${alt}` : helperText,
     };
 
-    fields.push(field);
+    owner.fields.push(field);
     setValue(key, defaults, value);
     img.setAttribute("src", `{{${key}}}`);
   });
 
   // Links
   const linkElements = Array.from(root.querySelectorAll("a[href]"));
-  let linkIndex = 0;
   linkElements.forEach((anchor) => {
     const href = anchor.getAttribute("href");
     if (!href) return;
@@ -214,17 +366,35 @@ function transformHtmlFile(
     if (!value || value.includes("{{")) return;
     if (URL_SKIP_PREFIXES.some((prefix) => value.toLowerCase().startsWith(prefix))) return;
 
-    linkIndex += 1;
-    const key = `${baseKey}.link${linkIndex}`;
+    const section = getSectionContext(anchor, {
+      sectionMap,
+      sectionKeySet,
+      sectionContexts,
+      baseKey,
+      file,
+    });
+    const card = getCardContext(anchor, section, {
+      cardKeySet,
+      cardMap,
+    });
+    const owner = card ?? section;
+    const { key, index } = buildFieldKey(owner, "link");
+    const helperText = buildHelperText(anchor, section, card);
     const field: SchemaField = {
       key,
-      label: `Link ${linkIndex}`,
+      label: buildFieldLabel({
+        section,
+        card,
+        baseLabel: anchor.textContent?.trim()
+          ? `Link (${truncateLabel(anchor.textContent.trim())})`
+          : `Link ${index}`,
+      }),
       type: "url",
       defaultValue: value,
-      helperText: anchor.textContent?.trim() ? `Texto: ${truncateLabel(anchor.textContent.trim())}` : undefined,
+      helperText,
     };
 
-    fields.push(field);
+    owner.fields.push(field);
     setValue(key, defaults, value);
     anchor.setAttribute("href", `{{${key}}}`);
   });
@@ -238,7 +408,486 @@ function transformHtmlFile(
     serialized = doctype ? `${doctype}\n${html}` : html;
   }
 
-  return { contents: serialized, fields };
+  const contentGroups = buildContentGroups(sectionContexts, baseKey);
+  const seoGroups = seoFields.length
+    ? [
+        {
+          id: `${baseKey}-seo`,
+          label: `${displayLabelForFile(file.path)} · SEO`,
+          description: "Metadados extraídos automaticamente.",
+          fields: seoFields,
+        },
+      ]
+    : [];
+
+  return {
+    contents: serialized,
+    contentGroups,
+    seoGroups,
+    hasFields: contentGroups.length > 0 || seoGroups.length > 0,
+  };
+}
+
+interface SectionContextOptions {
+  sectionMap: Map<Element, SectionContext>;
+  sectionKeySet: Set<string>;
+  sectionContexts: SectionContext[];
+  baseKey: string;
+  file: TemplateFile;
+}
+
+interface CardContextOptions {
+  cardKeySet: Set<string>;
+  cardMap: Map<Element, CardContext>;
+}
+
+interface SectionMetadata {
+  label: string;
+  description?: string;
+  idBase: string;
+}
+
+interface CardMetadata {
+  label: string;
+  description?: string;
+  idBase: string;
+}
+
+function getSectionContext(element: Element, options: SectionContextOptions): SectionContext {
+  const { sectionMap, sectionKeySet, sectionContexts, baseKey, file } = options;
+  const sectionElement = findSectionElement(element);
+  const existing = sectionElement ? sectionMap.get(sectionElement) : undefined;
+  if (existing) {
+    return existing;
+  }
+
+  const index = sectionContexts.length + 1;
+  const metadata = deriveSectionMetadata(sectionElement, index, file);
+  const id = ensureUniqueKey(metadata.idBase, sectionKeySet, `section_${index}`);
+
+  const context: SectionContext = {
+    id,
+    label: metadata.label,
+    description: metadata.description,
+    keyPrefix: `${baseKey}.${id}`,
+    element: sectionElement,
+    fields: [],
+    counters: {},
+    cards: [],
+    order: sectionContexts.length,
+  };
+
+  sectionContexts.push(context);
+  if (sectionElement) {
+    sectionMap.set(sectionElement, context);
+  }
+
+  return context;
+}
+
+function getCardContext(element: Element, section: SectionContext, options: CardContextOptions): CardContext | null {
+  const { cardKeySet, cardMap } = options;
+  const sectionElement = section.element;
+  if (!sectionElement) {
+    return null;
+  }
+
+  let current: Element | null = element;
+  while (current && current !== sectionElement && current !== sectionElement.parentElement) {
+    const mapped = cardMap.get(current);
+    if (mapped) {
+      return mapped;
+    }
+
+    if (isCardCandidate(current, sectionElement)) {
+      const index = section.cards.length + 1;
+      const metadata = deriveCardMetadata(current, index);
+      const id = ensureUniqueKey(`${section.id}_${metadata.idBase}`, cardKeySet, `${section.id}_card_${index}`);
+
+      const context: CardContext = {
+        id,
+        label: metadata.label,
+        description: metadata.description,
+        keyPrefix: `${section.keyPrefix}.${id}`,
+        element: current,
+        fields: [],
+        counters: {},
+        order: section.cards.length,
+        parentSectionId: section.id,
+      };
+
+      section.cards.push(context);
+      cardMap.set(current, context);
+      return context;
+    }
+
+    current = current.parentElement;
+  }
+
+  return null;
+}
+
+function buildFieldKey(owner: FieldOwnerContext, prefix: string): { key: string; index: number } {
+  const cleanPrefix = prefix || "text";
+  const current = (owner.counters[cleanPrefix] ?? 0) + 1;
+  owner.counters[cleanPrefix] = current;
+  const key = `${owner.keyPrefix}.${cleanPrefix}${current}`;
+  return { key, index: current };
+}
+
+function buildFieldLabel({
+  section,
+  card,
+  baseLabel,
+}: {
+  section: SectionContext;
+  card: CardContext | null;
+  baseLabel: string;
+}): string {
+  const parts = [section.label];
+  if (card) {
+    parts.push(card.label);
+  }
+  parts.push(baseLabel);
+  return parts.filter(Boolean).join(" · ");
+}
+
+function buildHelperText(element: Element, section: SectionContext, card: CardContext | null): string | undefined {
+  const descriptor = formatElementDescriptor(element);
+  const parts: string[] = [];
+  parts.push(`Elemento ${descriptor}`);
+  if (card) {
+    parts.push(`Card: ${card.label}`);
+  }
+  parts.push(`Seção: ${section.label}`);
+  return parts.join(" · ");
+}
+
+function buildContentGroups(sections: SectionContext[], keyPrefix: string): SchemaGroup[] {
+  const sortedSections = [...sections].sort((a, b) => a.order - b.order);
+  const groups: SchemaGroup[] = [];
+  const groupPrefix = schemaIdPrefix(keyPrefix);
+
+  sortedSections.forEach((section) => {
+    if (section.fields.length > 0) {
+      groups.push({
+        id: `${groupPrefix}-${section.id}`,
+        label: section.label,
+        description: section.description,
+        fields: section.fields,
+      });
+    }
+
+    const sortedCards = [...section.cards].sort((a, b) => a.order - b.order);
+    sortedCards.forEach((card) => {
+      if (card.fields.length > 0) {
+        groups.push({
+          id: `${groupPrefix}-${section.id}-${card.id}`,
+          label: `${section.label} · ${card.label}`,
+          description: card.description,
+          fields: card.fields,
+        });
+      }
+    });
+  });
+
+  return groups;
+}
+
+function buildSeoTabs(seoGroups: SchemaGroup[]): SchemaTab[] {
+  if (!seoGroups.length) {
+    return [];
+  }
+
+  return [
+    {
+      id: "auto-seo",
+      label: "SEO e metadados",
+      groups: seoGroups,
+    },
+  ];
+}
+
+function buildIntegrationsTab(): SchemaTab {
+  return {
+    id: "auto-integrations",
+    label: "Integrações e publicação",
+    groups: [
+      {
+        id: "auto-integrations-whatsapp",
+        label: "WhatsApp e atendimento",
+        description: "Configure o contato principal utilizado em botões e formulários.",
+        fields: [
+          {
+            key: "integrations.whatsapp.number",
+            label: "Número do WhatsApp",
+            type: "text",
+            helperText: "Inclua apenas dígitos (código do país + DDD + número).",
+          },
+          {
+            key: "integrations.whatsapp.message",
+            label: "Mensagem padrão",
+            type: "textarea",
+            helperText: "Texto enviado automaticamente quando o cliente clicar no botão.",
+          },
+          {
+            key: "integrations.whatsapp.ctaLabel",
+            label: "Texto do botão",
+            type: "text",
+          },
+        ],
+      },
+      {
+        id: "auto-integrations-publishing",
+        label: "Hospedagem e domínio",
+        description: "Informações para conectar serviços de publicação (Netlify, Vercel, etc.).",
+        fields: [
+          {
+            key: "integrations.publish.netlifySiteName",
+            label: "Nome do site (Netlify)",
+            type: "text",
+          },
+          {
+            key: "integrations.publish.customDomain",
+            label: "Domínio personalizado",
+            type: "text",
+          },
+          {
+            key: "integrations.publish.contactEmail",
+            label: "Email de contato",
+            type: "text",
+          },
+        ],
+      },
+      {
+        id: "auto-integrations-analytics",
+        label: "Métricas e pixels",
+        fields: [
+          {
+            key: "integrations.analytics.ga4",
+            label: "ID do Google Analytics 4",
+            type: "text",
+          },
+          {
+            key: "integrations.analytics.facebook",
+            label: "Meta Pixel",
+            type: "text",
+          },
+          {
+            key: "integrations.analytics.tiktok",
+            label: "TikTok Pixel",
+            type: "text",
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function findSectionElement(element: Element): Element | null {
+  const selector = SECTION_SELECTORS.join(",");
+  const closest = element.closest(selector);
+  if (closest) {
+    return closest;
+  }
+
+  const body = element.ownerDocument?.body ?? null;
+  if (body && body.contains(element)) {
+    return body;
+  }
+
+  return element;
+}
+
+function deriveSectionMetadata(element: Element | null, index: number, file: TemplateFile): SectionMetadata {
+  const fallback: SectionMetadata = {
+    label: `Seção ${index}`,
+    idBase: `section_${index}`,
+  };
+
+  if (!element) {
+    return fallback;
+  }
+
+  const descriptor = getElementDescriptor(element);
+  const hint = SECTION_LABEL_HINTS.find(({ pattern }) => pattern.test(descriptor));
+  if (hint) {
+    const label = hint.label;
+    return {
+      label,
+      idBase: sanitizeKey(label) || `section_${index}`,
+    };
+  }
+
+  const attributeLabel = pickSectionAttributeLabel(element);
+  if (attributeLabel) {
+    const formatted = formatLabel(attributeLabel);
+    return {
+      label: formatted,
+      description: formatted !== attributeLabel ? attributeLabel : undefined,
+      idBase: sanitizeKey(formatted) || `section_${index}`,
+    };
+  }
+
+  const tag = element.tagName.toLowerCase();
+  const tagLabel = tagBasedSectionLabel(tag);
+  if (tagLabel) {
+    return {
+      label: tagLabel,
+      idBase: sanitizeKey(tagLabel) || `section_${index}`,
+    };
+  }
+
+  if (element === element.ownerDocument?.body) {
+    const fileLabel = formatLabel(file.path.replace(/\.[^/.]+$/, ""));
+    return {
+      label: fileLabel || fallback.label,
+      idBase: sanitizeKey(fileLabel) || fallback.idBase,
+    };
+  }
+
+  return fallback;
+}
+
+function pickSectionAttributeLabel(element: Element): string | null {
+  const attributeCandidates = [
+    element.getAttribute("data-section-title"),
+    element.getAttribute("data-section"),
+    element.getAttribute("data-title"),
+    element.getAttribute("data-name"),
+    element.getAttribute("aria-label"),
+    element.getAttribute("title"),
+    element.id,
+  ];
+
+  for (const candidate of attributeCandidates) {
+    if (candidate && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  const heading = element.querySelector("h1, h2, h3, h4, h5, h6");
+  if (heading?.textContent?.trim()) {
+    return heading.textContent.trim();
+  }
+
+  return null;
+}
+
+function tagBasedSectionLabel(tag: string): string | null {
+  switch (tag) {
+    case "header":
+      return "Cabeçalho";
+    case "nav":
+      return "Navegação";
+    case "main":
+      return "Conteúdo principal";
+    case "footer":
+      return "Rodapé";
+    case "aside":
+      return "Barra lateral";
+    default:
+      return null;
+  }
+}
+
+function deriveCardMetadata(element: Element, index: number): CardMetadata {
+  const descriptor = getElementDescriptor(element);
+  const hint = CARD_LABEL_HINTS.find(({ pattern }) => pattern.test(descriptor));
+  const base = hint?.label ?? "Card";
+  const heading = element.querySelector("h1, h2, h3, h4, h5, h6, strong");
+  const description = heading?.textContent?.trim() ? truncateLabel(heading.textContent.trim(), 80) : undefined;
+
+  return {
+    label: `${base} ${index}`,
+    description,
+    idBase: sanitizeKey(`${base}_${index}`) || `card_${index}`,
+  };
+}
+
+function ensureUniqueKey(base: string, keySet: Set<string>, fallback: string): string {
+  const cleanBase = base || fallback;
+  let candidate = cleanBase;
+  let counter = 2;
+  while (keySet.has(candidate)) {
+    candidate = `${cleanBase}_${counter}`;
+    counter += 1;
+  }
+  keySet.add(candidate);
+  return candidate;
+}
+
+function schemaIdPrefix(baseKey: string): string {
+  const cleaned = baseKey.replace(/[^a-zA-Z0-9]+/g, "-").replace(/-+/g, "-").replace(/^-+|-+$/g, "");
+  return cleaned || "auto";
+}
+
+function formatElementDescriptor(element: Element): string {
+  const tag = element.tagName.toLowerCase();
+  const id = element.id ? `#${element.id}` : "";
+  const classes = element.classList.length
+    ? `.${Array.from(element.classList)
+        .slice(0, 3)
+        .map((item) => item.replace(/\s+/g, ""))
+        .join(".")}`
+    : "";
+  return `<${tag}${id}${classes}>`;
+}
+
+function getElementDescriptor(element: Element): string {
+  const attributes = Array.from(element.attributes)
+    .filter((attr) => attr.name.startsWith("data-") || attr.name === "id" || attr.name === "class")
+    .map((attr) => attr.value)
+    .join(" ");
+  return `${element.tagName} ${attributes}`.toLowerCase();
+}
+
+function isCardCandidate(element: Element, sectionElement: Element): boolean {
+  if (!element.parentElement) {
+    return false;
+  }
+
+  const descriptor = getElementDescriptor(element);
+  const hasKeyword = CARD_KEYWORDS.some((keyword) => descriptor.includes(keyword));
+  if (!hasKeyword) {
+    return false;
+  }
+
+  if (!hasSimilarSiblings(element)) {
+    return false;
+  }
+
+  return sectionElement.contains(element);
+}
+
+function hasSimilarSiblings(element: Element): boolean {
+  const parent = element.parentElement;
+  if (!parent) {
+    return false;
+  }
+
+  const siblings = Array.from(parent.children).filter((child) => child.tagName === element.tagName);
+  if (siblings.length < 2) {
+    return false;
+  }
+
+  const signature = signatureForCard(element);
+  const similar = siblings.filter((child) => signatureForCard(child) === signature);
+  return similar.length >= 2;
+}
+
+function signatureForCard(element: Element): string {
+  const classes = Array.from(element.classList)
+    .map((cls) => cls.trim())
+    .filter(Boolean)
+    .sort()
+    .join(" ");
+  const dataName = element.getAttribute("data-name") ?? element.getAttribute("data-type") ?? "";
+  return `${element.tagName.toLowerCase()}|${classes}|${dataName.toLowerCase()}`;
+}
+
+function prefixForTag(tag: string): string {
+  return TAG_KEY_PREFIX[tag.toLowerCase()] ?? "text";
 }
 
 function fallbackGeneration(templateLabel: string, originalFiles: TemplateFile[]): AutoTemplateResult {
