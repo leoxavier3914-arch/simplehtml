@@ -401,6 +401,14 @@ main {
   z-index: 30;
 }
 
+.floating-window-overlay-fullscreen {
+  pointer-events: auto;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+}
+
 .floating-window {
   position: absolute;
   width: 560px;
@@ -415,6 +423,17 @@ main {
   flex-direction: column;
   overflow: hidden;
   pointer-events: auto;
+}
+
+.floating-window-fullscreen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
 }
 
 .floating-window.dragging {
@@ -460,6 +479,19 @@ main {
   flex-direction: column;
   background: #f8fafc;
   position: relative;
+}
+
+.floating-window-content-fullscreen {
+  padding: 1.5rem;
+}
+
+.floating-window-content-fullscreen .floating-preview-controls {
+  padding: 0;
+  justify-content: flex-end;
+}
+
+.floating-window-content-fullscreen .floating-preview-surface {
+  padding: 1.5rem 0 0;
 }
 
 .floating-preview-controls {

@@ -41,7 +41,7 @@ export function PreviewPanel({ rendered }: PreviewPanelProps) {
       </aside>
 
       {isDetached && (
-        <FloatingPreviewWindow title="Preview" onClose={() => setIsDetached(false)}>
+        <FloatingPreviewWindow title="Preview" variant="fullscreen" onClose={() => setIsDetached(false)}>
           <div className="floating-preview-controls">
             <ModeSelector mode={mode} onChange={setMode} />
           </div>
