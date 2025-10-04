@@ -18,6 +18,10 @@ function schemaForField(field: SchemaField) {
     case "textarea":
     case "text":
     case "richtext":
+    case "select":
+    case "email":
+    case "tel":
+    case "radio":
       base = z.string();
       if (!field.required) {
         base = base.optional().or(z.literal(""));
@@ -44,18 +48,13 @@ function schemaForField(field: SchemaField) {
       }
       break;
     case "boolean":
+    case "checkbox":
       base = z.coerce.boolean();
       if (!field.required) {
         base = base.optional();
       }
       break;
     case "image":
-      base = z.string();
-      if (!field.required) {
-        base = base.optional().or(z.literal(""));
-      }
-      break;
-    case "select":
       base = z.string();
       if (!field.required) {
         base = base.optional().or(z.literal(""));
@@ -143,9 +142,14 @@ function renderInput(
     case "url":
     case "text":
       return <input {...commonProps} type="text" value={(value as string) ?? ""} onChange={(event) => onChange(event.target.value)} />;
+    case "email":
+      return <input {...commonProps} type="email" value={(value as string) ?? ""} onChange={(event) => onChange(event.target.value)} />;
+    case "tel":
+      return <input {...commonProps} type="tel" value={(value as string) ?? ""} onChange={(event) => onChange(event.target.value)} />;
     case "number":
       return <input {...commonProps} type="number" value={value as number | string} onChange={(event) => onChange(event.target.value)} />;
     case "boolean":
+    case "checkbox":
       return <input type="checkbox" checked={Boolean(value)} onChange={(event) => onChange(event.target.checked)} />;
     case "select":
       return (
@@ -157,6 +161,23 @@ function renderInput(
             </option>
           ))}
         </select>
+      );
+    case "radio":
+      return (
+        <div className="radio-group">
+          {field.options?.map((option) => (
+            <label key={option.value} className="radio-option">
+              <input
+                type="radio"
+                name={field.key}
+                value={option.value}
+                checked={value === option.value}
+                onChange={(event) => onChange(event.target.value)}
+              />
+              <span>{option.label}</span>
+            </label>
+          ))}
+        </div>
       );
     case "image":
       return (

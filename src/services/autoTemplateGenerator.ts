@@ -1,5 +1,5 @@
 import type { TemplateFile } from "@/core/template";
-import type { SchemaField, SchemaGroup, SchemaTab, TemplateSchema } from "@/types/schema";
+import type { SchemaField, SchemaGroup, SchemaOption, SchemaTab, TemplateSchema } from "@/types/schema";
 import { setValue } from "@/utils/objectPaths";
 
 interface AutoTemplateResult {
@@ -45,6 +45,10 @@ interface SectionContext extends FieldOwnerContext {
 
 interface CardContext extends FieldOwnerContext {
   parentSectionId: string;
+}
+
+interface FormContext extends SectionContext {
+  formElement: Element;
 }
 
 const TEXT_LABELS: Record<string, string> = {
@@ -332,11 +336,13 @@ function transformHtmlFile(
 
   const seoFields: SchemaField[] = [];
   const sectionContexts: SectionContext[] = [];
+  const formContexts: FormContext[] = [];
   const sectionMap = new Map<Element, SectionContext>();
   const sectionSignatureMap = new Map<string, SectionContext>();
   const sectionKeySet = new Set<string>();
   const cardKeySet = new Set<string>();
   const cardMap = new Map<Element, CardContext>();
+  const formKeySet = new Set<string>();
 
   // Meta tags first (SEO)
   const metaElements = Array.from(doc.querySelectorAll("meta[name][content]"));
@@ -375,6 +381,11 @@ function transformHtmlFile(
 
     const tagName = parent.tagName.toLowerCase();
     if (SKIP_TEXT_PARENTS.has(tagName)) {
+      current = walker.nextNode();
+      continue;
+    }
+
+    if (tagName === "textarea" || tagName === "option") {
       current = walker.nextNode();
       continue;
     }
@@ -515,6 +526,16 @@ function transformHtmlFile(
     anchor.setAttribute("href", `{{${key}}}`);
   });
 
+  const formElements = Array.from(root.querySelectorAll("form"));
+  formElements.forEach((formElement, index) => {
+    const context = createFormContext(formElement, index, baseKey, formKeySet);
+    formContexts.push(context);
+    processFormAttributes(formElement, context, defaults);
+    processFormControls(formElement, context, defaults);
+  });
+
+  const formTab = buildFormTab(formContexts, baseKey);
+
   let serialized: string;
   if (isFragment) {
     serialized = root.innerHTML;
@@ -524,7 +545,8 @@ function transformHtmlFile(
     serialized = doctype ? `${doctype}\n${html}` : html;
   }
 
-  const contentTabs = buildSectionTabs(sectionContexts, baseKey);
+  const sectionTabs = buildSectionTabs(sectionContexts, baseKey);
+  const contentTabs = formTab ? [...sectionTabs, formTab] : sectionTabs;
   const seoGroups = seoFields.length
     ? [
         {
@@ -695,6 +717,504 @@ function buildHelperText(element: Element, section: SectionContext, card: CardCo
   }
   parts.push(`Seção: ${section.label}`);
   return parts.join(" · ");
+}
+
+function buildFormFieldHelperText(
+  context: SectionContext,
+  element: Element,
+  labelText: string | null,
+  name: string | null,
+): string | undefined {
+  const base = buildHelperText(element, context, null);
+  const extras: string[] = [];
+  if (labelText) {
+    extras.push(`Rótulo: ${labelText}`);
+  }
+  if (name) {
+    extras.push(`name="${name}"`);
+  }
+  return [base, ...extras].filter(Boolean).join(" · ") || undefined;
+}
+
+function createFormContext(
+  formElement: Element,
+  index: number,
+  baseKey: string,
+  formKeySet: Set<string>,
+): FormContext {
+  const metadata = deriveFormMetadata(formElement, index + 1);
+  const id = ensureUniqueKey(metadata.idBase, formKeySet, `form_${index + 1}`);
+
+  return {
+    id,
+    label: metadata.label,
+    description: metadata.description,
+    keyPrefix: `${baseKey}.forms.${id}`,
+    element: formElement,
+    formElement,
+    fields: [],
+    counters: {},
+    cards: [],
+    order: index,
+  };
+}
+
+function processFormAttributes(formElement: Element, context: FormContext, defaults: Record<string, unknown>) {
+  const action = formElement.getAttribute("action");
+  if (action !== null && !action.includes("{{")) {
+    applyTemplateAttribute(formElement, "action", `${context.keyPrefix}.config.action`, action, defaults);
+  }
+
+  const methodValue = (formElement.getAttribute("method") ?? "get").toLowerCase();
+  if (!methodValue.includes("{{")) {
+    applyTemplateAttribute(formElement, "method", `${context.keyPrefix}.config.method`, methodValue, defaults);
+  }
+
+  const enctype = formElement.getAttribute("enctype");
+  if (enctype && !enctype.includes("{{")) {
+    applyTemplateAttribute(formElement, "enctype", `${context.keyPrefix}.config.enctype`, enctype, defaults);
+  }
+}
+
+function processFormControls(formElement: Element, context: FormContext, defaults: Record<string, unknown>) {
+  const processedRadioNames = new Set<string>();
+  const controls = Array.from(formElement.querySelectorAll("input, textarea, select"));
+
+  controls.forEach((control) => {
+    if (control.closest("form") !== formElement) {
+      return;
+    }
+
+    const tag = control.tagName.toLowerCase();
+
+    if (tag === "input") {
+      const input = control as HTMLInputElement;
+      const typeAttr = (input.getAttribute("type") ?? "text").toLowerCase();
+
+      if (["submit", "button", "reset", "image", "file", "hidden"].includes(typeAttr)) {
+        return;
+      }
+
+      if (typeAttr === "radio") {
+        const groupName = input.getAttribute("name") ?? input.getAttribute("id") ?? `radio_${processedRadioNames.size + 1}`;
+        if (!groupName || groupName.includes("{{")) {
+          return;
+        }
+        if (processedRadioNames.has(groupName)) {
+          return;
+        }
+        processedRadioNames.add(groupName);
+        processRadioGroup(formElement, context, defaults, groupName, input);
+        return;
+      }
+
+      if (typeAttr === "checkbox") {
+        processCheckboxInput(input, context, defaults);
+        return;
+      }
+
+      processTextInput(input, context, defaults, typeAttr);
+      return;
+    }
+
+    if (tag === "textarea") {
+      processTextareaField(control as HTMLTextAreaElement, context, defaults);
+      return;
+    }
+
+    if (tag === "select") {
+      processSelectField(control as HTMLSelectElement, context, defaults);
+    }
+  });
+}
+
+function processTextInput(
+  input: HTMLInputElement,
+  context: FormContext,
+  defaults: Record<string, unknown>,
+  typeAttr: string,
+) {
+  const classification = classifyInputFieldType(typeAttr);
+  const currentValue = input.getAttribute("value") ?? input.value ?? "";
+  if (currentValue.includes("{{")) {
+    return;
+  }
+
+  const name = input.getAttribute("name");
+  const labelText = findFormFieldLabel(context.formElement, input);
+  const prefix = sanitizeFormKeyPart(name ?? labelText ?? classification, classification);
+  const { key, index } = buildFieldKey(context, prefix);
+
+  const baseLabelSource = labelText ?? (name ? formatLabel(name) : formatLabel(`${classification} ${index}`));
+  const helperText = buildFormFieldHelperText(context, input, labelText, name);
+
+  const field: SchemaField = {
+    key,
+    label: buildFieldLabel({ section: context, card: null, baseLabel: baseLabelSource }),
+    type: classification === "number" ? "number" : classification === "email" ? "email" : classification === "tel" ? "tel" : "text",
+    helperText,
+    placeholder: input.getAttribute("placeholder")?.includes("{{")
+      ? undefined
+      : input.getAttribute("placeholder") ?? undefined,
+  };
+
+  const defaultValue = currentValue;
+
+  field.defaultValue = defaultValue;
+  setValue(key, defaults, defaultValue ?? "");
+  input.setAttribute("value", `{{${key}}}`);
+
+  const placeholder = input.getAttribute("placeholder");
+  if (placeholder && !placeholder.includes("{{")) {
+    const placeholderKey = `${key}Placeholder`;
+    applyTemplateAttribute(input, "placeholder", placeholderKey, placeholder, defaults);
+  }
+
+  context.fields.push(field);
+}
+
+function processCheckboxInput(input: HTMLInputElement, context: FormContext, defaults: Record<string, unknown>) {
+  const name = input.getAttribute("name");
+  const labelText = findFormFieldLabel(context.formElement, input);
+  const prefix = sanitizeFormKeyPart(name ?? labelText ?? "checkbox", "checkbox");
+  const { key, index } = buildFieldKey(context, prefix);
+  const baseLabelSource = labelText ?? (name ? formatLabel(name) : `Opção ${index}`);
+  const helperText = buildFormFieldHelperText(context, input, labelText, name);
+  const isChecked = input.hasAttribute("checked") || input.checked;
+
+  const field: SchemaField = {
+    key,
+    label: buildFieldLabel({ section: context, card: null, baseLabel: baseLabelSource }),
+    type: "checkbox",
+    helperText,
+    defaultValue: isChecked,
+  };
+
+  setValue(key, defaults, isChecked);
+  input.removeAttribute("checked");
+  input.setAttribute("checked", `{{${key}}}`);
+
+  const valueAttr = input.getAttribute("value");
+  if (valueAttr && !valueAttr.includes("{{")) {
+    const valueKey = `${key}Value`;
+    applyTemplateAttribute(input, "value", valueKey, valueAttr, defaults);
+  }
+
+  context.fields.push(field);
+}
+
+function processTextareaField(textarea: HTMLTextAreaElement, context: FormContext, defaults: Record<string, unknown>) {
+  const value = textarea.value ?? textarea.textContent ?? "";
+  if (value.includes("{{")) {
+    return;
+  }
+
+  const name = textarea.getAttribute("name");
+  const labelText = findFormFieldLabel(context.formElement, textarea);
+  const prefix = sanitizeFormKeyPart(name ?? labelText ?? "textarea", "textarea");
+  const { key, index } = buildFieldKey(context, prefix);
+  const baseLabelSource = labelText ?? (name ? formatLabel(name) : `Textarea ${index}`);
+  const helperText = buildFormFieldHelperText(context, textarea, labelText, name);
+
+  const field: SchemaField = {
+    key,
+    label: buildFieldLabel({ section: context, card: null, baseLabel: baseLabelSource }),
+    type: "textarea",
+    helperText,
+    placeholder: textarea.getAttribute("placeholder")?.includes("{{")
+      ? undefined
+      : textarea.getAttribute("placeholder") ?? undefined,
+    defaultValue: value,
+  };
+
+  setValue(key, defaults, value);
+  textarea.textContent = `{{${key}}}`;
+
+  const placeholder = textarea.getAttribute("placeholder");
+  if (placeholder && !placeholder.includes("{{")) {
+    const placeholderKey = `${key}Placeholder`;
+    applyTemplateAttribute(textarea, "placeholder", placeholderKey, placeholder, defaults);
+  }
+
+  context.fields.push(field);
+}
+
+function processSelectField(select: HTMLSelectElement, context: FormContext, defaults: Record<string, unknown>) {
+  const options = collectSelectOptions(select);
+  if (options.length === 0) {
+    return;
+  }
+
+  const name = select.getAttribute("name");
+  const labelText = findFormFieldLabel(context.formElement, select);
+  const prefix = sanitizeFormKeyPart(name ?? labelText ?? "select", "select");
+  const { key, index } = buildFieldKey(context, prefix);
+  const baseLabelSource = labelText ?? (name ? formatLabel(name) : `Seleção ${index}`);
+  const helperText = buildFormFieldHelperText(context, select, labelText, name);
+
+  const selectedOption = options.find((option) => option.value === select.value) ?? options[0];
+  const defaultValue = selectedOption?.value ?? "";
+
+  const field: SchemaField = {
+    key,
+    label: buildFieldLabel({ section: context, card: null, baseLabel: baseLabelSource }),
+    type: "select",
+    helperText,
+    options,
+    defaultValue,
+  };
+
+  setValue(key, defaults, defaultValue);
+  select.removeAttribute("value");
+  select.setAttribute("value", `{{${key}}}`);
+
+  const placeholder = select.getAttribute("placeholder");
+  if (placeholder && !placeholder.includes("{{")) {
+    const placeholderKey = `${key}Placeholder`;
+    applyTemplateAttribute(select, "placeholder", placeholderKey, placeholder, defaults);
+  }
+
+  context.fields.push(field);
+}
+
+function processRadioGroup(
+  formElement: Element,
+  context: FormContext,
+  defaults: Record<string, unknown>,
+  groupName: string,
+  initial: HTMLInputElement,
+) {
+  const selector = `input[type="radio"][name="${cssEscape(groupName)}"]`;
+  const radios = Array.from(formElement.querySelectorAll(selector)) as HTMLInputElement[];
+  if (radios.length === 0) {
+    radios.push(initial);
+  }
+
+  const labelText = findFormFieldLabel(context.formElement, initial);
+  const prefix = sanitizeFormKeyPart(groupName ?? labelText ?? "radio", "radio");
+  const { key, index } = buildFieldKey(context, prefix);
+  const baseLabelSource = labelText ?? formatLabel(groupName ?? `Radio ${index}`);
+  const helperText = buildFormFieldHelperText(context, initial, labelText, groupName);
+
+  const options: SchemaOption[] = [];
+  let defaultValue: string | undefined;
+
+  radios.forEach((radio, optionIndex) => {
+    const rawValue = radio.getAttribute("value") ?? "";
+    const optionLabel =
+      findFormFieldLabel(context.formElement, radio) ?? (rawValue || `Opção ${optionIndex + 1}`);
+    const optionValue = rawValue && !rawValue.includes("{{") ? rawValue : sanitizeFormKeyPart(optionLabel, `option_${optionIndex + 1}`);
+
+    if (!radio.getAttribute("value") || radio.getAttribute("value") !== optionValue) {
+      radio.setAttribute("value", optionValue);
+    }
+
+    if (radio.hasAttribute("checked") || radio.checked) {
+      defaultValue = optionValue;
+    }
+
+    radio.removeAttribute("checked");
+    radio.setAttribute("data-selected-key", `{{${key}}}`);
+    radio.setAttribute("data-option-value", optionValue);
+
+    options.push({ label: optionLabel, value: optionValue });
+  });
+
+  if (!defaultValue && options.length > 0) {
+    defaultValue = options[0].value;
+  }
+
+  const field: SchemaField = {
+    key,
+    label: buildFieldLabel({ section: context, card: null, baseLabel: baseLabelSource }),
+    type: "radio",
+    helperText,
+    options,
+    defaultValue,
+  };
+
+  setValue(key, defaults, defaultValue ?? "");
+  context.fields.push(field);
+}
+
+function collectSelectOptions(select: HTMLSelectElement): SchemaOption[] {
+  const options = Array.from(select.querySelectorAll("option"));
+  return options.map((option, index) => {
+    const label = option.textContent?.trim() || option.getAttribute("label") || option.getAttribute("value") || `Opção ${index + 1}`;
+    const valueAttr = option.getAttribute("value") ?? sanitizeFormKeyPart(label, `option_${index + 1}`);
+
+    if (!option.getAttribute("value") || option.getAttribute("value") !== valueAttr) {
+      option.setAttribute("value", valueAttr);
+    }
+
+    if (option.hasAttribute("selected")) {
+      option.removeAttribute("selected");
+    }
+
+    return { label, value: valueAttr };
+  });
+}
+
+interface FormMetadata {
+  label: string;
+  description?: string;
+  idBase: string;
+}
+
+function deriveFormMetadata(formElement: Element, index: number): FormMetadata {
+  const fallbackLabel = `Formulário ${index}`;
+  const attributeCandidates = [
+    formElement.getAttribute("data-form-title"),
+    formElement.getAttribute("data-form"),
+    formElement.getAttribute("aria-label"),
+    formElement.getAttribute("name"),
+    formElement.getAttribute("id"),
+  ];
+
+  let rawLabel: string | null = null;
+  for (const candidate of attributeCandidates) {
+    if (candidate && candidate.trim()) {
+      rawLabel = candidate.trim();
+      break;
+    }
+  }
+
+  if (!rawLabel) {
+    const legend = formElement.querySelector("legend");
+    if (legend?.textContent?.trim()) {
+      rawLabel = legend.textContent.trim();
+    }
+  }
+
+  if (!rawLabel) {
+    const heading = formElement.querySelector("h1, h2, h3, h4, h5, h6");
+    if (heading?.textContent?.trim()) {
+      rawLabel = heading.textContent.trim();
+    }
+  }
+
+  const label = rawLabel ? formatLabel(rawLabel) : fallbackLabel;
+  const description = rawLabel && rawLabel !== label ? rawLabel : undefined;
+  const idBase = sanitizeFormKeyPart(label, `form_${index}`);
+
+  return { label, description, idBase };
+}
+
+function findFormFieldLabel(formElement: Element, control: Element): string | null {
+  const ariaLabelledBy = control.getAttribute("aria-labelledby");
+  if (ariaLabelledBy) {
+    const ids = ariaLabelledBy.split(/\s+/).filter(Boolean);
+    for (const id of ids) {
+      const target = formElement.querySelector(`#${cssEscape(id)}`);
+      const text = target?.textContent?.trim();
+      if (text) {
+        return text;
+      }
+    }
+  }
+
+  const ariaLabel = control.getAttribute("aria-label");
+  if (ariaLabel && ariaLabel.trim()) {
+    return ariaLabel.trim();
+  }
+
+  const id = control.getAttribute("id");
+  if (id) {
+    const label = formElement.querySelector(`label[for="${cssEscape(id)}"]`);
+    if (label?.textContent?.trim()) {
+      return label.textContent.trim();
+    }
+  }
+
+  const wrappingLabel = control.closest("label");
+  if (wrappingLabel?.textContent?.trim()) {
+    return wrappingLabel.textContent.trim();
+  }
+
+  const title = control.getAttribute("title");
+  if (title && title.trim()) {
+    return title.trim();
+  }
+
+  return null;
+}
+
+function sanitizeFormKeyPart(value: string | null | undefined, fallback: string): string {
+  if (value && value.trim()) {
+    const sanitized = sanitizeKey(value.trim());
+    if (sanitized && sanitized !== "arquivo") {
+      return sanitized;
+    }
+  }
+  const fallbackSanitized = sanitizeKey(fallback);
+  return fallbackSanitized && fallbackSanitized !== "arquivo" ? fallbackSanitized : fallback;
+}
+
+function classifyInputFieldType(typeAttr: string): SchemaField["type"] {
+  switch (typeAttr) {
+    case "email":
+      return "email";
+    case "tel":
+      return "tel";
+    case "number":
+      return "number";
+    default:
+      return "text";
+  }
+}
+
+function applyTemplateAttribute(
+  element: Element,
+  attribute: string,
+  key: string,
+  value: string | number | boolean,
+  defaults: Record<string, unknown>,
+) {
+  const stringValue = String(value ?? "");
+  if (stringValue.includes("{{")) {
+    return;
+  }
+  setValue(key, defaults, value);
+  element.setAttribute(attribute, `{{${key}}}`);
+}
+
+function cssEscape(value: string): string {
+  return value.replace(/(["\\\[\]#:>+~*^$|=])/g, "\\$1");
+}
+
+function buildFormTab(formContexts: FormContext[], baseKey: string): GeneratedTab | null {
+  const contexts = formContexts.filter((context) => context.fields.length > 0);
+  if (contexts.length === 0) {
+    return null;
+  }
+
+  const prefix = schemaIdPrefix(`${baseKey}.forms`);
+  const labelUsage = new Map<string, number>();
+  const groups: SchemaGroup[] = [];
+  let earliestOrder = Number.MAX_SAFE_INTEGER;
+
+  contexts
+    .sort((a, b) => a.order - b.order)
+    .forEach((context) => {
+      earliestOrder = Math.min(earliestOrder, context.order);
+      const usageCount = (labelUsage.get(context.label) ?? 0) + 1;
+      labelUsage.set(context.label, usageCount);
+      const groupLabel = usageCount > 1 ? `${context.label} ${usageCount}` : context.label;
+
+      groups.push({
+        id: `${prefix}-${context.id}`,
+        label: groupLabel,
+        description: context.description,
+        fields: context.fields,
+      });
+    });
+
+  return {
+    id: "auto-forms",
+    label: "Formulários",
+    groups,
+    order: earliestOrder === Number.MAX_SAFE_INTEGER ? 0 : earliestOrder,
+  };
 }
 
 function buildSectionTabs(sections: SectionContext[], keyPrefix: string): GeneratedTab[] {

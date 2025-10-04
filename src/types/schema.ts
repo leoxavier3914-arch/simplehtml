@@ -7,7 +7,11 @@ export type SchemaFieldType =
   | "url"
   | "number"
   | "boolean"
-  | "richtext";
+  | "richtext"
+  | "email"
+  | "tel"
+  | "checkbox"
+  | "radio";
 
 export interface SchemaOption {
   label: string;
