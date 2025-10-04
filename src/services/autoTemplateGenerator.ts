@@ -162,6 +162,8 @@ const SECTION_TAB_HINTS: { pattern: RegExp; key: string; label: string }[] = [
   { pattern: /(pricing|plan|preco|assinatura)/i, key: "planos", label: "Planos" },
 ];
 
+const GENERIC_SECTION_LABEL_PATTERN = /^se[cç][aã]o\s+\d+$/i;
+
 const CARD_LABEL_HINTS: { pattern: RegExp; label: string }[] = [
   { pattern: /(card|item|box|bloco)/i, label: "Card" },
   { pattern: /(feature|benefit|solucao)/i, label: "Diferencial" },
@@ -1189,7 +1191,11 @@ function transformHtmlFile(
     serialized = doctype ? `${doctype}\n${html}` : html;
   }
 
-  const contentTabs = buildSectionTabs(sectionContexts, baseKey);
+  const contentTabs = buildSectionTabs(
+    sectionContexts,
+    baseKey,
+    displayLabelForFile(file.path),
+  );
   const seoGroups = seoFields.length
     ? [
         {
@@ -1627,14 +1633,23 @@ function buildHelperText(element: Element, section: SectionContext, card: CardCo
   return parts.join(" · ");
 }
 
-function buildSectionTabs(sections: SectionContext[], keyPrefix: string): GeneratedTab[] {
+function buildSectionTabs(
+  sections: SectionContext[],
+  keyPrefix: string,
+  fileLabel?: string,
+): GeneratedTab[] {
   const sortedSections = [...sections].sort((a, b) => a.order - b.order);
   const groupPrefix = schemaIdPrefix(keyPrefix);
   const tabMap = new Map<string, GeneratedTab>();
   const labelUsage = new Map<string, number>();
 
   sortedSections.forEach((section) => {
-    const { tabId, tabLabel } = categorizeSectionTab(section.label);
+    const normalizedLabel = section.label.trim();
+    const isGenericLabel = GENERIC_SECTION_LABEL_PATTERN.test(normalizedLabel);
+    const { tabId, tabLabel } = categorizeSectionTab(
+      section.label,
+      isGenericLabel ? fileLabel : undefined,
+    );
     const existingTab = tabMap.get(tabId);
     const tab: GeneratedTab = existingTab
       ? { ...existingTab, order: Math.min(existingTab.order, section.order) }
@@ -1674,12 +1689,27 @@ function buildSectionTabs(sections: SectionContext[], keyPrefix: string): Genera
   );
 }
 
-function categorizeSectionTab(label: string): { tabId: string; tabLabel: string } {
+function categorizeSectionTab(
+  label: string,
+  fileLabelSuffix?: string,
+): { tabId: string; tabLabel: string } {
   const normalized = label.toLowerCase();
   const hint = SECTION_TAB_HINTS.find(({ pattern }) => pattern.test(normalized));
   const tabKey = hint?.key ?? sanitizeKey(label) ?? "conteudo";
-  const tabLabel = hint?.label ?? (label || "Seção");
-  return { tabId: `auto-${tabKey}`, tabLabel };
+  const baseLabel = hint?.label ?? (label || "Seção");
+
+  if (!fileLabelSuffix) {
+    return { tabId: `auto-${tabKey}`, tabLabel: baseLabel };
+  }
+
+  const suffixKey = sanitizeFileSuffix(fileLabelSuffix);
+  const suffixLabel = fileLabelSuffix.trim();
+  const formattedSuffix = suffixLabel ? ` · ${suffixLabel}` : "";
+
+  return {
+    tabId: `auto-${tabKey}-${suffixKey}`,
+    tabLabel: `${baseLabel}${formattedSuffix}`,
+  };
 }
 
 function buildSeoTabs(seoGroups: SchemaGroup[]): SchemaTab[] {
@@ -2258,6 +2288,14 @@ function deriveTemplateName(label: string): string {
 
 function displayLabelForFile(path: string): string {
   return `Arquivo: ${path}`;
+}
+
+function sanitizeFileSuffix(value: string): string {
+  return value
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase() || "arquivo";
 }
 
 function sanitizeKey(value: string): string {
