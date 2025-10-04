@@ -3,10 +3,10 @@ TUTORIAL (PASSO A PASSO) — LANDING PETSHOP (SEM PROGRAMAR)
 
 O QUE VOCÊ COMPROU
 - Uma “página de vendas” pronta. Você só vai trocar textos, telefone, endereço, fotos e publicar.
-- Não precisa instalar nada. É só editar 1 arquivo (config.js) e arrastar a pasta pra internet.
+- Não precisa instalar nada. É só editar 1 arquivo (config.json) e arrastar a pasta pra internet.
 
 ARQUIVOS IMPORTANTES
-- config.js → onde você coloca seu nome, WhatsApp, endereço, horários, redes, e escolhe como o formulário funciona.
+- config.json → onde você coloca seu nome, WhatsApp, endereço, horários, redes, e escolhe como o formulário funciona.
 - assets/images/logo.png → seu logo (PNG com fundo transparente de preferência).
 - assets/images/gallery/ → suas fotos (veja tamanhos abaixo).
 
@@ -15,8 +15,8 @@ TAMANHOS RECOMENDADOS
 - Foto de capa (HERO): já vem pronta no modelo. Se quiser trocar, crie assets/images/hero.jpg com 1920×1280 px.
 - Galeria: gallery-1.jpg até gallery-8.jpg com 1200×1200 px cada (ou 4:5 se preferir).
 
-PASSO 1 — EDITAR CONFIG.JS
-1. Abra o arquivo config.js (pode ser no Bloco de Notas mesmo).
+PASSO 1 — EDITAR CONFIG.JSON
+1. Abra o arquivo config.json (pode ser no Bloco de Notas mesmo).
 2. No topo altere os dados gerais:
    - siteName e brand.primary/secondary → como o nome aparece no cabeçalho e rodapé
    - theme → personalize as cores (ex.: primary `#2aba8a`, secondary `#a5e2c8`, background `#0f1f14`). Use valores em hexadecimal (`#RRGGBB` ou `#RRGGBBAA` para transparência).
@@ -44,11 +44,11 @@ PASSO 2 — TROCAR LOGO E FOTOS (OPCIONAL)
 - Galeria: coloque suas fotos em assets/images/gallery/gallery-1.jpg … gallery-8.jpg (quanto mais melhor).
   Dica: use JPG com qualidade ~80 para carregar rápido.
 
-PASSO 3 — ESCOLHER COMO RECEBER CONTATOS (form.provider no config.js)
+PASSO 3 — ESCOLHER COMO RECEBER CONTATOS (form.provider no config.json)
 - "whatsapp" (RECOMENDADO): ao enviar, o cliente abre conversa no seu WhatsApp com a mensagem pronta.
 - "netlify": publique no Netlify (https://app.netlify.com). O formulário aparece no painel do Netlify. A página de sucesso é thanks.html.
-  Personalize `thankYouPage` no `config.js` para mostrar sua mensagem e link de retorno.
-- "formspree": crie um formulário grátis em https://formspree.io e copie o “endpoint” para config.js.
+-  Personalize `thankYouPage` no `config.json` para mostrar sua mensagem e link de retorno.
+- "formspree": crie um formulário grátis em https://formspree.io e copie o “endpoint” para config.json.
 - "emailjs": exige conta no EmailJS e chave pública. Mostramos um aviso até você plugar o SDK.
 
 PASSO 4 — PUBLICAR GRÁTIS
@@ -64,7 +64,7 @@ PASSO 5 — TESTAR
 - Troque fotos e recarregue a página para ver a Galeria atualizada.
 
 FAQ RÁPIDA
-- “Meu número de WhatsApp não abre?” → Verifique se o número no config.js tem só dígitos (com DDI + DDD).
+- “Meu número de WhatsApp não abre?” → Verifique se o número no config.json tem só dígitos (com DDI + DDD).
 - “Minhas fotos não aparecem?” → Confirme os nomes dos arquivos e pastas (gallery-1.jpg, etc.).
 - “Quero mudar cores” → Fica em style.css, mas se não quiser mexer em código, podemos oferecer uma versão pronta com outra paleta.
 - “Posso usar meu domínio?” → Sim. Dentro da plataforma (Netlify, Vercel…) tem a opção “Domínios”.
