@@ -3,21 +3,57 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { useProject } from "@/state/ProjectContext";
 import { NetlifyPublisher } from "@/services/publishers/netlifyPublisher";
+import { isTauriEnvironment } from "@/utils/platform";
+
+interface WindowWithDirectoryPicker extends Window {
+  showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>;
+}
 
 export function TopBar() {
-  const { project, rendered, selectTemplate, saveConfigTo, loadConfigFrom, recordLog, updatePublisherUrl } = useProject();
+  const {
+    project,
+    rendered,
+    selectTemplate,
+    selectTemplateFromHandle,
+    saveConfigTo,
+    loadConfigFrom,
+    recordLog,
+    updatePublisherUrl,
+  } = useProject();
   const [publishing, setPublishing] = useState(false);
   const publisher = useMemo(() => new NetlifyPublisher(), []);
+  const tauriAvailable = isTauriEnvironment();
 
   const handleOpenTemplate = async () => {
-    const selection = await open({ directory: true, multiple: false, title: "Selecione a pasta do template" });
-    if (typeof selection === "string") {
-      await selectTemplate(selection);
+    if (tauriAvailable) {
+      const selection = await open({ directory: true, multiple: false, title: "Selecione a pasta do template" });
+      if (typeof selection === "string") {
+        await selectTemplate(selection);
+      }
+      return;
+    }
+
+    const withPicker = window as WindowWithDirectoryPicker;
+    if (withPicker.showDirectoryPicker) {
+      try {
+        const handle = await withPicker.showDirectoryPicker();
+        await selectTemplateFromHandle(handle);
+      } catch (error) {
+        if ((error as DOMException).name !== "AbortError") {
+          recordLog({ type: "error", message: `Falha ao abrir template: ${(error as Error).message}` });
+        }
+      }
+    } else {
+      recordLog({ type: "error", message: "Seleção de diretório não suportada neste navegador." });
     }
   };
 
   const handleSaveConfig = async () => {
     if (!project) return;
+    if (!tauriAvailable) {
+      recordLog({ type: "warning", message: "Salvar configuração está disponível apenas no aplicativo desktop." });
+      return;
+    }
     const filePath = await save({
       title: "Salvar config.json",
       defaultPath: project?.templatePath ? `${project.templatePath}/config.json` : "config.json",
@@ -32,6 +68,11 @@ export function TopBar() {
   const handleExportZip = async () => {
     if (!rendered) {
       recordLog({ type: "warning", message: "Nenhuma renderização disponível" });
+      return;
+    }
+
+    if (!tauriAvailable) {
+      recordLog({ type: "warning", message: "Exportar ZIP está disponível apenas no aplicativo desktop." });
       return;
     }
 
@@ -78,6 +119,10 @@ export function TopBar() {
 
   const handleLoadConfig = async () => {
     if (!project) return;
+    if (!tauriAvailable) {
+      recordLog({ type: "warning", message: "Abrir config está disponível apenas no aplicativo desktop." });
+      return;
+    }
     const selection = await open({ multiple: false, filters: [{ name: "JSON", extensions: ["json"] }] });
     if (typeof selection === "string") {
       await loadConfigFrom(selection);
@@ -89,13 +134,25 @@ export function TopBar() {
       <div className="logo">simplehtml Studio</div>
       <div className="actions">
         <button onClick={handleOpenTemplate}>Abrir Template</button>
-        <button onClick={handleLoadConfig} disabled={!project}>
+        <button
+          onClick={handleLoadConfig}
+          disabled={!project || !tauriAvailable}
+          title={!tauriAvailable ? "Disponível apenas no aplicativo desktop." : undefined}
+        >
           Abrir Config
         </button>
-        <button onClick={handleSaveConfig} disabled={!project}>
+        <button
+          onClick={handleSaveConfig}
+          disabled={!project || !tauriAvailable}
+          title={!tauriAvailable ? "Disponível apenas no aplicativo desktop." : undefined}
+        >
           Salvar
         </button>
-        <button onClick={handleExportZip} disabled={!rendered}>
+        <button
+          onClick={handleExportZip}
+          disabled={!rendered || !tauriAvailable}
+          title={!tauriAvailable ? "Disponível apenas no aplicativo desktop." : undefined}
+        >
           Exportar ZIP
         </button>
         <button onClick={handlePublish} disabled={!rendered || publishing}>

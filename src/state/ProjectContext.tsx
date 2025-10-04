@@ -4,7 +4,14 @@ import type { RenderedTemplate, TemplateConfig } from "@/core/template";
 import type { TemplateSchema, SchemaField } from "@/types/schema";
 import type { LogEntry, ProjectState } from "@/types/project";
 import { SimpleTemplateEngine } from "@/services/simpleTemplateEngine";
-import { loadDefaultConfig, loadSchema, loadTemplateFiles } from "@/services/templateLoader";
+import {
+  loadDefaultConfig,
+  loadDefaultConfigFromHandle,
+  loadSchema,
+  loadSchemaFromHandle,
+  loadTemplateFiles,
+  loadTemplateFilesFromHandle,
+} from "@/services/templateLoader";
 import { setValue } from "@/utils/objectPaths";
 import { v4 as uuid } from "uuid";
 
@@ -15,6 +22,7 @@ interface ProjectContextValue {
   logs: LogEntry[];
   loading: boolean;
   selectTemplate: (templatePath: string) => Promise<void>;
+  selectTemplateFromHandle: (handle: FileSystemDirectoryHandle) => Promise<void>;
   updateConfigValue: (field: SchemaField, value: unknown) => Promise<void>;
   applyConfigPatch: (patch: Record<string, unknown>) => Promise<void>;
   saveConfigTo: (filePath: string) => Promise<void>;
@@ -130,6 +138,45 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     [recordLog, reRender],
   );
 
+  const selectTemplateFromHandle = useCallback(
+    async (handle: FileSystemDirectoryHandle) => {
+      setLoading(true);
+      try {
+        const templateLabel = handle.name ?? "template";
+        recordLog({ type: "info", message: `Carregando template do navegador (${templateLabel})` });
+        const [schema, defaults, files] = await Promise.all([
+          loadSchemaFromHandle(handle),
+          loadDefaultConfigFromHandle(handle),
+          loadTemplateFilesFromHandle(handle),
+        ]);
+
+        const baseConfig = {
+          ...schemaDefaults(schema),
+          ...(defaults ?? {}),
+        };
+
+        const state: ProjectState = {
+          name: schema.templateName,
+          templatePath: `browser:${templateLabel}`,
+          schema,
+          config: baseConfig,
+          publisherUrl: undefined,
+        };
+
+        setProject(state);
+        setTemplateFiles(files);
+        await reRender(baseConfig, files);
+        recordLog({ type: "success", message: "Template carregado com sucesso." });
+      } catch (error) {
+        console.error(error);
+        recordLog({ type: "error", message: `Falha ao carregar template: ${(error as Error).message}` });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [recordLog, reRender],
+  );
+
   const updateConfigValue = useCallback(
     async (field: SchemaField, value: unknown) => {
       if (!project) return;
@@ -197,6 +244,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       logs,
       loading,
       selectTemplate,
+      selectTemplateFromHandle,
       updateConfigValue,
       applyConfigPatch,
       saveConfigTo,
@@ -211,6 +259,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       logs,
       loading,
       selectTemplate,
+      selectTemplateFromHandle,
       updateConfigValue,
       applyConfigPatch,
       saveConfigTo,
