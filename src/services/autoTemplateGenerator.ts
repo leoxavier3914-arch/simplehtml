@@ -19,13 +19,13 @@ interface TransformResult {
   contents: string;
   contentTabs: GeneratedTab[];
   seoGroups: SchemaGroup[];
-  colorGroups: SchemaGroup[];
+  styleGroups: SchemaGroup[];
   hasFields: boolean;
 }
 
 interface CssTransformResult {
   contents: string;
-  colorGroups: SchemaGroup[];
+  styleGroups: SchemaGroup[];
   hasFields: boolean;
 }
 
@@ -71,10 +71,18 @@ const TEXT_LABELS: Record<string, string> = {
   span: "Texto",
   strong: "Texto em destaque",
   em: "Texto em destaque",
+  small: "Texto complementar",
+  figcaption: "Legenda",
+  blockquote: "Citação",
+  cite: "Fonte",
   button: "Texto do botão",
   a: "Texto do link",
   li: "Item de lista",
   label: "Rótulo",
+  title: "Título da página",
+  caption: "Legenda da tabela",
+  th: "Cabeçalho da tabela",
+  td: "Célula da tabela",
 };
 
 const SKIP_TEXT_PARENTS = new Set(["script", "style", "noscript", "template"]);
@@ -178,10 +186,18 @@ const TAG_KEY_PREFIX: Record<string, string> = {
   span: "text",
   strong: "highlight",
   em: "highlight",
+  small: "text",
+  figcaption: "caption",
+  blockquote: "blockquote",
+  cite: "citation",
   button: "button",
   a: "linkText",
   li: "item",
   label: "label",
+  title: "titleTag",
+  caption: "tableCaption",
+  th: "tableHeader",
+  td: "tableCell",
 };
 
 export function autoGenerateTemplate(
@@ -195,7 +211,7 @@ export function autoGenerateTemplate(
   const defaults: Record<string, unknown> = {};
   const contentTabMap = new Map<string, GeneratedTab>();
   const seoGroups: SchemaGroup[] = [];
-  const colorGroups: SchemaGroup[] = [];
+  const styleGroups: SchemaGroup[] = [];
   const processedFiles: TemplateFile[] = [];
   let hasFields = false;
 
@@ -208,7 +224,7 @@ export function autoGenerateTemplate(
 
       if (result.hasFields) {
         hasFields = true;
-        colorGroups.push(...result.colorGroups);
+        styleGroups.push(...result.styleGroups);
       }
 
       return;
@@ -236,7 +252,7 @@ export function autoGenerateTemplate(
         }
       });
       seoGroups.push(...result.seoGroups);
-      colorGroups.push(...result.colorGroups);
+      styleGroups.push(...result.styleGroups);
     }
   });
 
@@ -253,11 +269,11 @@ export function autoGenerateTemplate(
     ...contentTabs.map((tab) => ({ id: tab.id, label: tab.label, groups: tab.groups })),
   ];
 
-  if (colorGroups.length > 0) {
+  if (styleGroups.length > 0) {
     tabs.push({
       id: "auto-styles",
-      label: "Cores",
-      groups: colorGroups,
+      label: "Estilos visuais",
+      groups: styleGroups,
     });
   }
 
@@ -278,9 +294,9 @@ function transformCssFile(
   baseKey: string,
   defaults: Record<string, unknown>,
 ): CssTransformResult {
-  const colorKeySet = new Set<string>();
+  const styleKeySet = new Set<string>();
   const variableKeyMap = new Map<string, string>();
-  const colorFields: SchemaField[] = [];
+  const styleFields: SchemaField[] = [];
   const variablePattern = /(--[a-zA-Z0-9_-]+)(\s*:\s*)(#[0-9a-fA-F]{3,8})\b/g;
 
   let contents = file.contents.replace(
@@ -290,7 +306,7 @@ function transformCssFile(
 
       if (!fieldKey) {
         const cleanedVar = sanitizeKey(varName.replace(/^--/, ""));
-        const uniqueVar = ensureUniqueKey(cleanedVar || "cor", colorKeySet, "cor");
+        const uniqueVar = ensureUniqueKey(cleanedVar || "cor", styleKeySet, "cor");
         fieldKey = `${baseKey}.colors.${uniqueVar}`;
         variableKeyMap.set(varName, fieldKey);
 
@@ -303,7 +319,7 @@ function transformCssFile(
           helperText: `Variável CSS ${varName}`,
         };
 
-        colorFields.push(field);
+        styleFields.push(field);
         setValue(fieldKey, defaults, colorValue);
       }
 
@@ -318,13 +334,55 @@ function transformCssFile(
 
   while ((match = propertyPattern.exec(scanSource))) {
     const propertyName = match[1].trim().toLowerCase();
-    if (!isColorProperty(propertyName)) {
+    const rawValueSegment = match[3];
+    const valueStart = match.index + match[1].length + match[2].length;
+    const valueEnd = valueStart + rawValueSegment.length;
+
+    let handled = false;
+
+    if (isColorProperty(propertyName)) {
+      const detection = detectColorValue(propertyName, rawValueSegment);
+      if (detection) {
+        const selector = extractSelectorForIndex(scanSource, match.index);
+        if (!selector) {
+          continue;
+        }
+
+        const selectorForLabel = selector.split(",")[0]?.trim() ?? selector;
+        const keyBase = buildCssColorKeyBase(selectorForLabel, propertyName);
+        const uniqueKey = ensureUniqueKey(
+          keyBase,
+          styleKeySet,
+          propertyName.replace(/-+/g, "_") || "cor",
+        );
+        const fieldKey = `${baseKey}.colors.${uniqueKey}`;
+
+        const field: SchemaField = {
+          key: fieldKey,
+          label: buildCssColorLabel(selectorForLabel, propertyName, detection.type),
+          type: detection.type,
+          defaultValue: detection.defaultValue,
+          helperText: `Propriedade ${propertyName} no seletor ${selectorForLabel}`,
+        };
+
+        styleFields.push(field);
+        setValue(fieldKey, defaults, detection.defaultValue);
+
+        const leading = rawValueSegment.match(/^\s*/)?.[0] ?? "";
+        const trailing = rawValueSegment.match(/\s*$/)?.[0] ?? "";
+        const importantSuffix = detection.important ? ` ${detection.important}` : "";
+        const replacement = `${leading}{{${fieldKey}}}${importantSuffix}${trailing}`;
+
+        cssReplacements.push({ start: valueStart, end: valueEnd, replacement });
+        handled = true;
+      }
+    }
+
+    if (handled) {
       continue;
     }
 
-    const rawValueSegment = match[3];
-    const detection = detectColorValue(propertyName, rawValueSegment);
-    if (!detection) {
+    if (!/url\(/i.test(rawValueSegment)) {
       continue;
     }
 
@@ -334,28 +392,74 @@ function transformCssFile(
     }
 
     const selectorForLabel = selector.split(",")[0]?.trim() ?? selector;
-    const keyBase = buildCssColorKeyBase(selectorForLabel, propertyName);
-    const uniqueKey = ensureUniqueKey(keyBase, colorKeySet, propertyName.replace(/-+/g, "_") || "cor");
-    const fieldKey = `${baseKey}.colors.${uniqueKey}`;
-
-    const field: SchemaField = {
-      key: fieldKey,
-      label: buildCssColorLabel(selectorForLabel, propertyName, detection.type),
-      type: detection.type,
-      defaultValue: detection.defaultValue,
-      helperText: `Propriedade ${propertyName} no seletor ${selectorForLabel}`,
-    };
-
-    colorFields.push(field);
-    setValue(fieldKey, defaults, detection.defaultValue);
-
-    const valueStart = match.index + match[1].length + match[2].length;
-    const valueEnd = valueStart + rawValueSegment.length;
     const leading = rawValueSegment.match(/^\s*/)?.[0] ?? "";
     const trailing = rawValueSegment.match(/\s*$/)?.[0] ?? "";
-    const importantSuffix = detection.important ? ` ${detection.important}` : "";
-    const replacement = `${leading}{{${fieldKey}}}${importantSuffix}${trailing}`;
+    const coreValue = rawValueSegment.slice(
+      leading.length,
+      rawValueSegment.length - trailing.length,
+    );
+    const trimmedCore = coreValue.trim();
+    if (!trimmedCore || trimmedCore.includes("{{")) {
+      continue;
+    }
 
+    const { value: assetValue, important } = splitImportant(trimmedCore);
+    const assetPattern = /url\((['"]?)([^)"']+)\1\)/gi;
+    let assetMatch: RegExpExecArray | null;
+    let lastIndex = 0;
+    let rebuilt = "";
+    let assetOccurrence = 0;
+    let createdField = false;
+
+    while ((assetMatch = assetPattern.exec(assetValue))) {
+      const fullMatch = assetMatch[0];
+      if (!fullMatch || fullMatch.includes("{{")) {
+        continue;
+      }
+
+      const quote = assetMatch[1] ?? "";
+      const urlValue = assetMatch[2]?.trim() ?? "";
+      if (!urlValue || urlValue.startsWith("data:")) {
+        continue;
+      }
+
+      assetOccurrence += 1;
+      const matchStart = assetMatch.index;
+      rebuilt += assetValue.slice(lastIndex, matchStart);
+
+      const keyBase = buildCssAssetKeyBase(
+        selectorForLabel,
+        propertyName,
+        assetOccurrence,
+        urlValue,
+      );
+      const uniqueKey = ensureUniqueKey(keyBase, styleKeySet, "imagem");
+      const fieldKey = `${baseKey}.assets.${uniqueKey}`;
+
+      const field: SchemaField = {
+        key: fieldKey,
+        label: buildCssAssetLabel(selectorForLabel, propertyName, assetOccurrence),
+        type: "image",
+        defaultValue: urlValue,
+        helperText: `Imagem referenciada na propriedade ${propertyName} do seletor ${selectorForLabel}`,
+      };
+
+      styleFields.push(field);
+      setValue(fieldKey, defaults, urlValue);
+
+      const placeholder = `url(${quote}{{${fieldKey}}}${quote})`;
+      rebuilt += placeholder;
+      lastIndex = matchStart + fullMatch.length;
+      createdField = true;
+    }
+
+    if (!createdField) {
+      continue;
+    }
+
+    rebuilt += assetValue.slice(lastIndex);
+    const importantSuffix = important ? ` ${important}` : "";
+    const replacement = `${leading}${rebuilt}${importantSuffix}${trailing}`;
     cssReplacements.push({ start: valueStart, end: valueEnd, replacement });
   }
 
@@ -363,19 +467,21 @@ function transformCssFile(
     contents = applyTextReplacements(scanSource, cssReplacements);
   }
 
-  if (!colorFields.length) {
-    return { contents: file.contents, colorGroups: [], hasFields: false };
+  if (!styleFields.length) {
+    return { contents: file.contents, styleGroups: [], hasFields: false };
   }
 
-  const groupId = `${schemaIdPrefix(`${baseKey}.colors`)}-palette`;
-  const colorGroup: SchemaGroup = {
+  styleFields.sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+
+  const groupId = `${schemaIdPrefix(`${baseKey}.styles`)}-palette`;
+  const styleGroup: SchemaGroup = {
     id: groupId,
-    label: `${displayLabelForFile(file.path)} · Cores`,
-    description: "Cores detectadas automaticamente no CSS.",
-    fields: colorFields,
+    label: `${displayLabelForFile(file.path)} · Estilos`,
+    description: "Cores, gradientes e imagens detectadas automaticamente no CSS.",
+    fields: styleFields,
   };
 
-  return { contents, colorGroups: [colorGroup], hasFields: true };
+  return { contents, styleGroups: [styleGroup], hasFields: true };
 }
 
 function transformHtmlFile(
@@ -391,17 +497,17 @@ function transformHtmlFile(
   const doc = parser.parseFromString(htmlToParse, "text/html");
 
   if (!doc || doc.querySelector("parsererror")) {
-    return { contents, contentTabs: [], seoGroups: [], colorGroups: [], hasFields: false };
+    return { contents, contentTabs: [], seoGroups: [], styleGroups: [], hasFields: false };
   }
 
   const root: Element | null = isFragment ? doc.body : doc.documentElement;
   if (!root) {
-    return { contents, contentTabs: [], seoGroups: [], colorGroups: [], hasFields: false };
+    return { contents, contentTabs: [], seoGroups: [], styleGroups: [], hasFields: false };
   }
 
   const seoFields: SchemaField[] = [];
-  const inlineColorFields: SchemaField[] = [];
-  const inlineColorKeySet = new Set<string>();
+  const inlineStyleFields: SchemaField[] = [];
+  const inlineStyleKeySet = new Set<string>();
   const sectionContexts: SectionContext[] = [];
   const sectionMap = new Map<Element, SectionContext>();
   const sectionSignatureMap = new Map<string, SectionContext>();
@@ -523,24 +629,145 @@ function transformHtmlFile(
       cardMap,
     });
     const owner = card ?? section;
-    const alt = img.getAttribute("alt")?.trim();
-    const { key, index } = buildFieldKey(owner, "image");
     const helperText = buildHelperText(img, section, card);
+    const altRaw = img.getAttribute("alt");
+    const hasAltAttribute = img.hasAttribute("alt");
+    const altValue = altRaw ?? "";
+    const altTrimmed = altRaw?.trim();
+
+    const { key, index } = buildFieldKey(owner, "image");
     const field: SchemaField = {
       key,
       label: buildFieldLabel({
         section,
         card,
-        baseLabel: alt ? `Imagem (${truncateLabel(alt)})` : `Imagem ${index}`,
+        baseLabel: altTrimmed ? `Imagem (${truncateLabel(altTrimmed)})` : `Imagem ${index}`,
       }),
       type: "image",
       defaultValue: value,
-      helperText: alt ? `${helperText ? `${helperText} · ` : ""}Alt: ${alt}` : helperText,
+      helperText,
     };
 
     owner.fields.push(field);
     setValue(key, defaults, value);
     img.setAttribute("src", `{{${key}}}`);
+
+    if (hasAltAttribute) {
+      const { key: altKey, index: altIndex } = buildFieldKey(owner, "imageAlt");
+      const altBaseLabel = altTrimmed
+        ? `Texto alternativo (${truncateLabel(altTrimmed)})`
+        : `Texto alternativo ${altIndex}`;
+      const altField: SchemaField = {
+        key: altKey,
+        label: buildFieldLabel({ section, card, baseLabel: altBaseLabel }),
+        type: "text",
+        defaultValue: altValue,
+        helperText: helperText
+          ? `${helperText} · Texto alternativo (atributo alt)`
+          : "Texto alternativo (atributo alt)",
+      };
+
+      owner.fields.push(altField);
+      setValue(altKey, defaults, altValue);
+      img.setAttribute("alt", `{{${altKey}}}`);
+    }
+
+    const attributeVariants: { name: string; type: SchemaField["type"] }[] = [
+      { name: "srcset", type: "text" },
+      { name: "data-src", type: "image" },
+      { name: "data-srcset", type: "text" },
+      { name: "data-background", type: "image" },
+      { name: "data-bg", type: "image" },
+      { name: "data-image", type: "image" },
+      { name: "data-lazy", type: "image" },
+    ];
+
+    attributeVariants.forEach(({ name, type }) => {
+      const rawAttr = img.getAttribute(name);
+      if (!rawAttr) {
+        return;
+      }
+      const attrValue = rawAttr.trim();
+      if (!attrValue || attrValue.includes("{{")) {
+        return;
+      }
+
+      const prefix = `image_${sanitizeKey(name) || "atributo"}`;
+      const { key: attrKey, index: attrIndex } = buildFieldKey(owner, prefix);
+      const attributeLabel = formatAttributeName(name);
+      const labelSuffix = attributeLabel.length
+        ? `${attributeLabel}${attrIndex > 1 ? ` ${attrIndex}` : ""}`
+        : `variação ${attrIndex}`;
+      const baseLabel = `Variante da imagem (${labelSuffix})`;
+
+      const attrField: SchemaField = {
+        key: attrKey,
+        label: buildFieldLabel({ section, card, baseLabel }),
+        type,
+        defaultValue: attrValue,
+        helperText: helperText ? `${helperText} · Atributo ${name}` : `Atributo ${name}`,
+      };
+
+      owner.fields.push(attrField);
+      setValue(attrKey, defaults, attrValue);
+      img.setAttribute(name, `{{${attrKey}}}`);
+    });
+  });
+
+  const pictureSourceElements = Array.from(
+    root.querySelectorAll("picture source[srcset], picture source[data-srcset]"),
+  );
+  pictureSourceElements.forEach((source) => {
+    const section = getSectionContext(source, {
+      sectionMap,
+      sectionKeySet,
+      sectionContexts,
+      baseKey,
+      file,
+      sectionSignatureMap,
+    });
+    const card = getCardContext(source, section, {
+      cardKeySet,
+      cardMap,
+    });
+    const owner = card ?? section;
+    const helperText = buildHelperText(source, section, card);
+
+    const attributeVariants: { name: string; type: SchemaField["type"] }[] = [
+      { name: "srcset", type: "text" },
+      { name: "data-srcset", type: "text" },
+    ];
+
+    attributeVariants.forEach(({ name, type }) => {
+      const rawAttr = source.getAttribute(name);
+      if (!rawAttr) {
+        return;
+      }
+      const attrValue = rawAttr.trim();
+      if (!attrValue || attrValue.includes("{{")) {
+        return;
+      }
+
+      const prefix = `source_${sanitizeKey(name) || "variante"}`;
+      const { key, index } = buildFieldKey(owner, prefix);
+      const attributeLabel = formatAttributeName(name);
+      const labelSuffix = attributeLabel.length
+        ? `${attributeLabel}${index > 1 ? ` ${index}` : ""}`
+        : `variação ${index}`;
+      const baseLabel = `Fonte responsiva (${labelSuffix})`;
+
+      const field: SchemaField = {
+        key,
+        label: buildFieldLabel({ section, card, baseLabel }),
+        type,
+        defaultValue: attrValue,
+        helperText: helperText ? `${helperText} · Atributo ${name}` : `Atributo ${name}`,
+      };
+
+      owner.fields.push(field);
+      setValue(key, defaults, attrValue);
+      source.setAttribute(name, `{{${key}}}`);
+    });
   });
 
   // Links
@@ -599,41 +826,112 @@ function transformHtmlFile(
 
     while ((styleMatch = pattern.exec(styleValue))) {
       const propertyName = styleMatch[1].trim().toLowerCase();
-      if (!isColorProperty(propertyName)) {
-        continue;
-      }
-
       const rawSegment = styleMatch[3];
-      const detection = detectColorValue(propertyName, rawSegment);
-      if (!detection) {
-        continue;
-      }
-
-      const keyBase = buildInlineColorKeyBase(element, propertyName);
-      const uniqueKey = ensureUniqueKey(
-        keyBase,
-        inlineColorKeySet,
-        propertyName.replace(/-+/g, "_") || "cor",
-      );
-      const fieldKey = `${baseKey}.colors.${uniqueKey}`;
-
-      const field: SchemaField = {
-        key: fieldKey,
-        label: buildInlineColorLabel(element, propertyName, detection.type),
-        type: detection.type,
-        defaultValue: detection.defaultValue,
-        helperText: `Estilo inline ${propertyName} em ${formatElementDescriptor(element)}`,
-      };
-
-      inlineColorFields.push(field);
-      setValue(fieldKey, defaults, detection.defaultValue);
-
       const valueStart = styleMatch.index + styleMatch[1].length + styleMatch[2].length;
       const valueEnd = valueStart + rawSegment.length;
+
+      let handled = false;
+
+      if (isColorProperty(propertyName)) {
+        const detection = detectColorValue(propertyName, rawSegment);
+        if (detection) {
+          const keyBase = buildInlineColorKeyBase(element, propertyName);
+          const uniqueKey = ensureUniqueKey(
+            keyBase,
+            inlineStyleKeySet,
+            propertyName.replace(/-+/g, "_") || "cor",
+          );
+          const fieldKey = `${baseKey}.colors.${uniqueKey}`;
+
+          const field: SchemaField = {
+            key: fieldKey,
+            label: buildInlineColorLabel(element, propertyName, detection.type),
+            type: detection.type,
+            defaultValue: detection.defaultValue,
+            helperText: `Estilo inline ${propertyName} em ${formatElementDescriptor(element)}`,
+          };
+
+          inlineStyleFields.push(field);
+          setValue(fieldKey, defaults, detection.defaultValue);
+
+          const leading = rawSegment.match(/^\s*/)?.[0] ?? "";
+          const trailing = rawSegment.match(/\s*$/)?.[0] ?? "";
+          const importantSuffix = detection.important ? ` ${detection.important}` : "";
+          const replacement = `${leading}{{${fieldKey}}}${importantSuffix}${trailing}`;
+
+          replacements.push({ start: valueStart, end: valueEnd, replacement });
+          handled = true;
+        }
+      }
+
+      if (handled) {
+        continue;
+      }
+
+      if (!/url\(/i.test(rawSegment)) {
+        continue;
+      }
+
       const leading = rawSegment.match(/^\s*/)?.[0] ?? "";
       const trailing = rawSegment.match(/\s*$/)?.[0] ?? "";
-      const importantSuffix = detection.important ? ` ${detection.important}` : "";
-      const replacement = `${leading}{{${fieldKey}}}${importantSuffix}${trailing}`;
+      const coreValue = rawSegment.slice(leading.length, rawSegment.length - trailing.length);
+      const trimmedCore = coreValue.trim();
+      if (!trimmedCore || trimmedCore.includes("{{")) {
+        continue;
+      }
+
+      const { value: assetValue, important } = splitImportant(trimmedCore);
+      const assetPattern = /url\((['"]?)([^)"']+)\1\)/gi;
+      let assetMatch: RegExpExecArray | null;
+      let rebuilt = "";
+      let lastIndex = 0;
+      let createdField = false;
+      let assetOccurrence = 0;
+
+      while ((assetMatch = assetPattern.exec(assetValue))) {
+        const fullMatch = assetMatch[0];
+        if (!fullMatch || fullMatch.includes("{{")) {
+          continue;
+        }
+
+        const quote = assetMatch[1] ?? "";
+        const urlValue = assetMatch[2]?.trim() ?? "";
+        if (!urlValue || urlValue.startsWith("data:")) {
+          continue;
+        }
+
+        assetOccurrence += 1;
+        const matchStart = assetMatch.index;
+        rebuilt += assetValue.slice(lastIndex, matchStart);
+
+        const keyBase = buildInlineAssetKeyBase(element, propertyName, assetOccurrence, urlValue);
+        const uniqueKey = ensureUniqueKey(keyBase, inlineStyleKeySet, "imagem");
+        const fieldKey = `${baseKey}.assets.${uniqueKey}`;
+
+        const field: SchemaField = {
+          key: fieldKey,
+          label: buildInlineAssetLabel(element, propertyName, assetOccurrence),
+          type: "image",
+          defaultValue: urlValue,
+          helperText: `Imagem referenciada na propriedade ${propertyName} em ${formatElementDescriptor(element)}`,
+        };
+
+        inlineStyleFields.push(field);
+        setValue(fieldKey, defaults, urlValue);
+
+        const placeholder = `url(${quote}{{${fieldKey}}}${quote})`;
+        rebuilt += placeholder;
+        lastIndex = matchStart + fullMatch.length;
+        createdField = true;
+      }
+
+      if (!createdField) {
+        continue;
+      }
+
+      rebuilt += assetValue.slice(lastIndex);
+      const importantSuffix = important ? ` ${important}` : "";
+      const replacement = `${leading}${rebuilt}${importantSuffix}${trailing}`;
 
       replacements.push({ start: valueStart, end: valueEnd, replacement });
     }
@@ -641,6 +939,244 @@ function transformHtmlFile(
     if (replacements.length > 0) {
       const updated = applyTextReplacements(styleValue, replacements);
       element.setAttribute("style", updated);
+    }
+  });
+
+  const videoElements = Array.from(root.querySelectorAll("video[poster]"));
+  videoElements.forEach((video) => {
+    const posterRaw = video.getAttribute("poster");
+    if (posterRaw === null || posterRaw.includes("{{")) {
+      return;
+    }
+
+    const section = getSectionContext(video, {
+      sectionMap,
+      sectionKeySet,
+      sectionContexts,
+      baseKey,
+      file,
+      sectionSignatureMap,
+    });
+    const card = getCardContext(video, section, {
+      cardKeySet,
+      cardMap,
+    });
+    const owner = card ?? section;
+    const helperText = buildHelperText(video, section, card);
+    const { key, index } = buildFieldKey(owner, "videoPoster");
+    const baseLabel = index > 1 ? `Poster do vídeo ${index}` : "Poster do vídeo";
+
+    const field: SchemaField = {
+      key,
+      label: buildFieldLabel({ section, card, baseLabel }),
+      type: "image",
+      defaultValue: posterRaw,
+      helperText: helperText
+        ? `${helperText} · Poster do vídeo`
+        : "Poster do vídeo (atributo poster)",
+    };
+
+    owner.fields.push(field);
+    setValue(key, defaults, posterRaw);
+    video.setAttribute("poster", `{{${key}}}`);
+  });
+
+  const iframeElements = Array.from(root.querySelectorAll("iframe[src]"));
+  iframeElements.forEach((iframe) => {
+    const src = iframe.getAttribute("src");
+    if (!src) return;
+    const value = src.trim();
+    if (!value || value.includes("{{")) return;
+
+    const section = getSectionContext(iframe, {
+      sectionMap,
+      sectionKeySet,
+      sectionContexts,
+      baseKey,
+      file,
+      sectionSignatureMap,
+    });
+    const card = getCardContext(iframe, section, {
+      cardKeySet,
+      cardMap,
+    });
+    const owner = card ?? section;
+    const helperText = buildHelperText(iframe, section, card);
+    const { key, index } = buildFieldKey(owner, "iframe");
+    const baseLabel = index > 1 ? `Iframe ${index}` : "Iframe";
+
+    const field: SchemaField = {
+      key,
+      label: buildFieldLabel({ section, card, baseLabel }),
+      type: "url",
+      defaultValue: value,
+      helperText: helperText ? `${helperText} · Fonte do iframe` : "URL do iframe (atributo src)",
+    };
+
+    owner.fields.push(field);
+    setValue(key, defaults, value);
+    iframe.setAttribute("src", `{{${key}}}`);
+  });
+
+  const backgroundAttributeElements = Array.from(
+    root.querySelectorAll("[data-background], [data-bg], [data-image]"),
+  ).filter((element) => element.tagName.toLowerCase() !== "img");
+  backgroundAttributeElements.forEach((element) => {
+    const section = getSectionContext(element, {
+      sectionMap,
+      sectionKeySet,
+      sectionContexts,
+      baseKey,
+      file,
+      sectionSignatureMap,
+    });
+    const card = getCardContext(element, section, {
+      cardKeySet,
+      cardMap,
+    });
+    const owner = card ?? section;
+    const helperText = buildHelperText(element, section, card);
+
+    ["data-background", "data-bg", "data-image"].forEach((attribute) => {
+      const rawAttr = element.getAttribute(attribute);
+      if (!rawAttr) {
+        return;
+      }
+      const attrValue = rawAttr.trim();
+      if (!attrValue || attrValue.includes("{{")) {
+        return;
+      }
+
+      const prefix = `background_${sanitizeKey(attribute) || "imagem"}`;
+      const { key, index } = buildFieldKey(owner, prefix);
+      const attributeLabel = formatAttributeName(attribute);
+      const labelSuffix = attributeLabel.length
+        ? `${attributeLabel}${index > 1 ? ` ${index}` : ""}`
+        : `variação ${index}`;
+      const baseLabel = `Imagem de fundo (${labelSuffix})`;
+
+      const field: SchemaField = {
+        key,
+        label: buildFieldLabel({ section, card, baseLabel }),
+        type: "image",
+        defaultValue: attrValue,
+        helperText: helperText ? `${helperText} · Atributo ${attribute}` : `Atributo ${attribute}`,
+      };
+
+      owner.fields.push(field);
+      setValue(key, defaults, attrValue);
+      element.setAttribute(attribute, `{{${key}}}`);
+    });
+  });
+
+  const formFieldElements = Array.from(root.querySelectorAll("input, textarea"));
+  formFieldElements.forEach((element) => {
+    const tag = element.tagName.toLowerCase();
+    const section = getSectionContext(element, {
+      sectionMap,
+      sectionKeySet,
+      sectionContexts,
+      baseKey,
+      file,
+      sectionSignatureMap,
+    });
+    const card = getCardContext(element, section, {
+      cardKeySet,
+      cardMap,
+    });
+    const owner = card ?? section;
+    const helperText = buildHelperText(element, section, card);
+    const descriptor = describeFormField(element);
+
+    if (tag === "input") {
+      const typeAttr = (element.getAttribute("type") ?? "text").toLowerCase();
+
+      const placeholderRaw = element.getAttribute("placeholder");
+      if (placeholderRaw !== null && !placeholderRaw.includes("{{")) {
+        const { key, index } = buildFieldKey(owner, "placeholder");
+        const placeholderTrimmed = placeholderRaw.trim();
+        const placeholderLabelSource = descriptor ?? (placeholderTrimmed || undefined);
+        const baseLabel = placeholderLabelSource
+          ? `Placeholder (${truncateLabel(placeholderLabelSource)})`
+          : `Placeholder ${index}`;
+
+        const field: SchemaField = {
+          key,
+          label: buildFieldLabel({ section, card, baseLabel }),
+          type: "text",
+          defaultValue: placeholderRaw,
+          helperText: helperText ? `${helperText} · Placeholder` : "Placeholder do campo",
+        };
+
+        owner.fields.push(field);
+        setValue(key, defaults, placeholderRaw);
+        element.setAttribute("placeholder", `{{${key}}}`);
+      }
+
+      const valueRaw = element.getAttribute("value");
+      const skipValueTypes = new Set(["hidden", "file", "checkbox", "radio"]);
+      if (
+        valueRaw !== null &&
+        !valueRaw.includes("{{") &&
+        !skipValueTypes.has(typeAttr)
+      ) {
+        const trimmedValue = valueRaw.trim();
+        const isButtonType = ["submit", "button", "reset"].includes(typeAttr);
+        const shouldCreateValueField = trimmedValue.length > 0 || isButtonType;
+
+        if (shouldCreateValueField) {
+          const prefix = isButtonType ? "buttonValue" : "inputValue";
+          const { key, index } = buildFieldKey(owner, prefix);
+          const descriptorLabel = descriptor ?? (trimmedValue || undefined);
+          const baseLabel = descriptorLabel
+            ? isButtonType
+              ? `Texto do botão (${truncateLabel(descriptorLabel)})`
+              : `Valor padrão (${truncateLabel(descriptorLabel)})`
+            : isButtonType
+              ? `Texto do botão ${index}`
+              : `Valor padrão ${index}`;
+
+          const field: SchemaField = {
+            key,
+            label: buildFieldLabel({ section, card, baseLabel }),
+            type: "text",
+            defaultValue: valueRaw,
+            helperText: helperText
+              ? `${helperText} · ${isButtonType ? "Texto do botão" : "Valor padrão"}`
+              : isButtonType
+                ? "Texto exibido no botão (atributo value)"
+                : "Valor padrão (atributo value)",
+          };
+
+          owner.fields.push(field);
+          setValue(key, defaults, valueRaw);
+          element.setAttribute("value", `{{${key}}}`);
+        }
+      }
+    }
+
+    if (tag === "textarea") {
+      const placeholderRaw = element.getAttribute("placeholder");
+      if (placeholderRaw !== null && !placeholderRaw.includes("{{")) {
+        const { key, index } = buildFieldKey(owner, "placeholder");
+        const placeholderTrimmed = placeholderRaw.trim();
+        const placeholderLabelSource = descriptor ?? (placeholderTrimmed || undefined);
+        const baseLabel = placeholderLabelSource
+          ? `Placeholder (${truncateLabel(placeholderLabelSource)})`
+          : `Placeholder ${index}`;
+
+        const field: SchemaField = {
+          key,
+          label: buildFieldLabel({ section, card, baseLabel }),
+          type: "text",
+          defaultValue: placeholderRaw,
+          helperText: helperText ? `${helperText} · Placeholder` : "Placeholder do campo",
+        };
+
+        owner.fields.push(field);
+        setValue(key, defaults, placeholderRaw);
+        element.setAttribute("placeholder", `{{${key}}}`);
+      }
     }
   });
 
@@ -664,13 +1200,14 @@ function transformHtmlFile(
         },
       ]
     : [];
-  const colorGroups = inlineColorFields.length
+  inlineStyleFields.sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+  const styleGroups = inlineStyleFields.length
     ? [
         {
-          id: `${schemaIdPrefix(`${baseKey}.inline-colors`)}-palette`,
-          label: `${displayLabelForFile(file.path)} · Cores`,
-          description: "Cores detectadas automaticamente no HTML.",
-          fields: inlineColorFields,
+          id: `${schemaIdPrefix(`${baseKey}.inline-styles`)}-palette`,
+          label: `${displayLabelForFile(file.path)} · Estilos`,
+          description: "Cores, gradientes e imagens detectadas automaticamente no HTML.",
+          fields: inlineStyleFields,
         },
       ]
     : [];
@@ -679,11 +1216,11 @@ function transformHtmlFile(
     contents: serialized,
     contentTabs,
     seoGroups,
-    colorGroups,
+    styleGroups,
     hasFields:
       contentTabs.some((tab) => tab.groups.some((group) => group.fields.length > 0)) ||
       seoGroups.length > 0 ||
-      colorGroups.length > 0,
+      styleGroups.length > 0,
   };
 }
 
@@ -958,6 +1495,62 @@ function buildInlineColorLabel(
   return `${labelPrefix}${propertyLabel} (${descriptor})`;
 }
 
+function buildCssAssetKeyBase(
+  selector: string,
+  property: string,
+  occurrence: number,
+  urlValue: string,
+): string {
+  const base = `${selector} ${property} asset_${occurrence} ${urlValue}`;
+  const sanitized = sanitizeKey(base);
+  return sanitized && sanitized !== "arquivo" ? sanitized : `asset_${occurrence}`;
+}
+
+function buildCssAssetLabel(
+  selector: string,
+  property: string,
+  occurrence: number,
+): string {
+  const selectorLabel = selector || "Regra";
+  const isBackground = /background|image/i.test(property);
+  const labelPrefix = isBackground ? "Imagem de fundo" : "Recurso do CSS";
+  const occurrenceSuffix = occurrence > 1 ? ` · ${occurrence}` : "";
+  return `${labelPrefix} (${selectorLabel}${occurrenceSuffix})`;
+}
+
+function buildInlineAssetKeyBase(
+  element: Element,
+  property: string,
+  occurrence: number,
+  urlValue: string,
+): string {
+  const parts: string[] = [element.tagName.toLowerCase()];
+  if (element.id) {
+    parts.push(`id_${element.id}`);
+  }
+  const firstClass = element.classList.item(0);
+  if (firstClass) {
+    parts.push(`class_${firstClass}`);
+  }
+  parts.push(property.replace(/-+/g, "_"));
+  parts.push(`asset_${occurrence}`);
+  const combined = `${parts.join("_")} ${urlValue}`;
+  const sanitized = sanitizeKey(combined);
+  return sanitized && sanitized !== "arquivo" ? sanitized : `asset_${occurrence}`;
+}
+
+function buildInlineAssetLabel(
+  element: Element,
+  property: string,
+  occurrence: number,
+): string {
+  const descriptor = describeElementForColorLabel(element);
+  const isBackground = /background|image/i.test(property);
+  const labelPrefix = isBackground ? "Imagem de fundo" : "Recurso";
+  const occurrenceSuffix = occurrence > 1 ? ` · ${occurrence}` : "";
+  return `${labelPrefix} (${descriptor}${occurrenceSuffix})`;
+}
+
 function describeElementForColorLabel(element: Element): string {
   if (element.id) {
     return `#${element.id}`;
@@ -967,6 +1560,11 @@ function describeElementForColorLabel(element: Element): string {
     return `.${firstClass}`;
   }
   return element.tagName.toLowerCase();
+}
+
+function formatAttributeName(attribute: string): string {
+  const normalized = attribute.replace(/^data[-_]/, "data ");
+  return formatLabel(normalized);
 }
 
 function splitImportant(value: string): { value: string; important?: string } {
@@ -1397,6 +1995,59 @@ function formatElementDescriptor(element: Element): string {
         .join(".")}`
     : "";
   return `<${tag}${id}${classes}>`;
+}
+
+function describeFormField(element: Element): string | undefined {
+  const labelText = findAssociatedLabelText(element);
+  if (labelText) {
+    return labelText;
+  }
+
+  const attributeCandidates = [
+    element.getAttribute("aria-label"),
+    element.getAttribute("data-label"),
+    element.getAttribute("name"),
+    element.getAttribute("id"),
+    element.getAttribute("placeholder"),
+  ];
+
+  for (const candidate of attributeCandidates) {
+    if (candidate && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return undefined;
+}
+
+function findAssociatedLabelText(element: Element): string | null {
+  const doc = element.ownerDocument;
+  if (!doc) {
+    return null;
+  }
+
+  const id = element.getAttribute("id");
+  if (id) {
+    const labels = Array.from(doc.querySelectorAll("label[for]"));
+    for (const label of labels) {
+      if (label.getAttribute("for") === id) {
+        const text = label.textContent?.trim();
+        if (text) {
+          return text;
+        }
+      }
+    }
+  }
+
+  const parentLabel = element.closest("label");
+  if (parentLabel?.textContent) {
+    const text = parentLabel.textContent.trim();
+    if (text) {
+      return text;
+    }
+  }
+
+  return null;
 }
 
 function getElementDescriptor(element: Element): string {
