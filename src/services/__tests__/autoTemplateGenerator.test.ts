@@ -36,6 +36,43 @@ describe("autoTemplateGenerator navigation deduplication", () => {
     expect(navigationGroups).toHaveLength(1);
     expect(navigationGroups[0]?.fields.length).toBeGreaterThan(0);
   });
+
+  it("creates separate tabs for generic section labels across different files", () => {
+    const buildHtml = (text: string) => `<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Landing</title>
+  </head>
+  <body>
+    <section>
+      <p>${text}</p>
+    </section>
+  </body>
+</html>`;
+
+    const files: TemplateFile[] = [
+      { path: "primeiro.html", contents: buildHtml("Primeiro arquivo") },
+      { path: "segundo.html", contents: buildHtml("Segundo arquivo") },
+    ];
+
+    const result = autoGenerateTemplate("Landing", files);
+
+    const tabIds = result.schema.tabs.map((tab) => tab.id);
+    expect(tabIds).toContain("auto-se_o_1-arquivo_primeiro_html");
+    expect(tabIds).toContain("auto-se_o_1-arquivo_segundo_html");
+
+    const genericTabs = result.schema.tabs.filter((tab) =>
+      tab.id.startsWith("auto-se_o_1-arquivo_"),
+    );
+    expect(genericTabs).toHaveLength(2);
+    expect(genericTabs.map((tab) => tab.label)).toEqual(
+      expect.arrayContaining([
+        "Seção 1 · Arquivo: primeiro.html",
+        "Seção 1 · Arquivo: segundo.html",
+      ]),
+    );
+  });
 });
 
 describe("autoTemplateGenerator color extraction", () => {
