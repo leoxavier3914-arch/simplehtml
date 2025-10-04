@@ -1,0 +1,442 @@
+{
+  "version": 1,
+  "templateName": "AuMiau Petshop",
+  "tabs": [
+    {
+      "id": "identity",
+      "label": "Identidade",
+      "groups": [
+        {
+          "id": "brand",
+          "label": "Marca",
+          "fields": [
+            { "key": "siteName", "label": "Nome do site", "type": "text", "required": true },
+            { "key": "brand.primary", "label": "Nome principal", "type": "text", "required": true },
+            { "key": "brand.secondary", "label": "Complemento", "type": "text" },
+            { "key": "brand.short", "label": "Nome curto", "type": "text" }
+          ]
+        },
+        {
+          "id": "theme",
+          "label": "Cores do tema",
+          "fields": [
+            { "key": "theme.background", "label": "Fundo principal", "type": "color" },
+            { "key": "theme.backgroundAccent", "label": "Fundo secundário", "type": "color" },
+            { "key": "theme.primary", "label": "Cor primária", "type": "color" },
+            { "key": "theme.secondary", "label": "Cor secundária", "type": "color" },
+            { "key": "theme.text", "label": "Texto (fundos claros)", "type": "color" },
+            { "key": "theme.textSoft", "label": "Texto suave", "type": "color" },
+            { "key": "theme.card", "label": "Fundo dos cards", "type": "color" },
+            { "key": "theme.stroke", "label": "Bordas", "type": "color" },
+            { "key": "theme.muted", "label": "Texto auxiliar", "type": "color" },
+            { "key": "theme.white", "label": "Branco", "type": "color" }
+          ]
+        },
+        {
+          "id": "contact-info",
+          "label": "Contato e endereço",
+          "fields": [
+            { "key": "whatsappNumber", "label": "WhatsApp (apenas dígitos)", "type": "text", "required": true },
+            { "key": "addressHtml", "label": "Endereço (com quebras de linha)", "type": "richtext" },
+            { "key": "openingHours.0.day", "label": "Funcionamento 1 - Dia", "type": "text" },
+            { "key": "openingHours.0.hours", "label": "Funcionamento 1 - Horário", "type": "text" },
+            { "key": "openingHours.1.day", "label": "Funcionamento 2 - Dia", "type": "text" },
+            { "key": "openingHours.1.hours", "label": "Funcionamento 2 - Horário", "type": "text" },
+            { "key": "openingHours.2.day", "label": "Funcionamento 3 - Dia", "type": "text" },
+            { "key": "openingHours.2.hours", "label": "Funcionamento 3 - Horário", "type": "text" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "navigation",
+      "label": "Navegação",
+      "groups": [
+        {
+          "id": "menu",
+          "label": "Links do menu",
+          "fields": [
+            { "key": "navigation.links.0.label", "label": "Link 1 - Texto", "type": "text" },
+            { "key": "navigation.links.0.href", "label": "Link 1 - Destino", "type": "text" },
+            { "key": "navigation.links.1.label", "label": "Link 2 - Texto", "type": "text" },
+            { "key": "navigation.links.1.href", "label": "Link 2 - Destino", "type": "text" },
+            { "key": "navigation.links.2.label", "label": "Link 3 - Texto", "type": "text" },
+            { "key": "navigation.links.2.href", "label": "Link 3 - Destino", "type": "text" },
+            { "key": "navigation.links.3.label", "label": "Link 4 - Texto", "type": "text" },
+            { "key": "navigation.links.3.href", "label": "Link 4 - Destino", "type": "text" }
+          ]
+        },
+        {
+          "id": "menu-cta",
+          "label": "CTA do menu",
+          "fields": [
+            { "key": "navigation.cta.label", "label": "Texto do botão", "type": "text" },
+            { "key": "navigation.cta.href", "label": "Destino do botão", "type": "text" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hero",
+      "label": "Hero",
+      "groups": [
+        {
+          "id": "hero-content",
+          "label": "Conteúdo principal",
+          "fields": [
+            { "key": "hero.title", "label": "Título", "type": "text", "required": true },
+            { "key": "hero.highlight", "label": "Destaque", "type": "text", "required": true },
+            { "key": "hero.description", "label": "Descrição", "type": "textarea", "required": true }
+          ]
+        },
+        {
+          "id": "hero-trust",
+          "label": "Selos de confiança",
+          "fields": [
+            { "key": "hero.trustBadges.0", "label": "Selo 1", "type": "text" },
+            { "key": "hero.trustBadges.1", "label": "Selo 2", "type": "text" },
+            { "key": "hero.trustBadges.2", "label": "Selo 3", "type": "text" }
+          ]
+        },
+        {
+          "id": "hero-cta",
+          "label": "Chamadas para ação",
+          "fields": [
+            { "key": "hero.primaryCTA.label", "label": "CTA principal - Texto", "type": "text" },
+            { "key": "hero.primaryCTA.href", "label": "CTA principal - Destino", "type": "text" },
+            { "key": "hero.secondaryCTA.label", "label": "CTA secundário - Texto", "type": "text" },
+            { "key": "hero.secondaryCTA.href", "label": "CTA secundário - Destino", "type": "text" }
+          ]
+        },
+        {
+          "id": "hero-promo",
+          "label": "Promoção",
+          "fields": [
+            { "key": "hero.promo.enabled", "label": "Exibir promoção", "type": "boolean" },
+            { "key": "hero.promo.title", "label": "Título da promoção", "type": "text" },
+            { "key": "hero.promo.description", "label": "Descrição", "type": "textarea" },
+            { "key": "hero.promo.highlight", "label": "Destaque da promoção", "type": "text" },
+            { "key": "hero.promo.leadForm.nameLabel", "label": "Formulário - Rótulo do nome", "type": "text" },
+            { "key": "hero.promo.leadForm.namePlaceholder", "label": "Formulário - Placeholder do nome", "type": "text" },
+            { "key": "hero.promo.leadForm.whatsappLabel", "label": "Formulário - Rótulo do WhatsApp", "type": "text" },
+            { "key": "hero.promo.leadForm.whatsappPlaceholder", "label": "Formulário - Placeholder do WhatsApp", "type": "text" },
+            { "key": "hero.promo.leadForm.buttonLabel", "label": "Formulário - Texto do botão", "type": "text" },
+            { "key": "hero.promo.disclaimer", "label": "Aviso legal", "type": "textarea" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "services",
+      "label": "Serviços",
+      "groups": [
+        {
+          "id": "services-header",
+          "label": "Cabeçalho",
+          "fields": [
+            { "key": "services.enabled", "label": "Exibir seção", "type": "boolean" },
+            { "key": "services.title", "label": "Título", "type": "text" },
+            { "key": "services.subtitle", "label": "Subtítulo", "type": "textarea" }
+          ]
+        },
+        {
+          "id": "service-1",
+          "label": "Serviço 1",
+          "fields": [
+            { "key": "services.items.0.icon", "label": "Ícone", "type": "select", "options": [
+              { "label": "Tesoura", "value": "scissors" },
+              { "label": "Estetoscópio", "value": "steth" },
+              { "label": "Casa", "value": "house" },
+              { "label": "Caminhão", "value": "truck" },
+              { "label": "Patinha", "value": "paw" }
+            ] },
+            { "key": "services.items.0.title", "label": "Título", "type": "text" },
+            { "key": "services.items.0.description", "label": "Descrição", "type": "textarea" },
+            { "key": "services.items.0.features.0", "label": "Diferencial 1", "type": "text" },
+            { "key": "services.items.0.features.1", "label": "Diferencial 2", "type": "text" },
+            { "key": "services.items.0.features.2", "label": "Diferencial 3", "type": "text" }
+          ]
+        },
+        {
+          "id": "service-2",
+          "label": "Serviço 2",
+          "fields": [
+            { "key": "services.items.1.icon", "label": "Ícone", "type": "select", "options": [
+              { "label": "Tesoura", "value": "scissors" },
+              { "label": "Estetoscópio", "value": "steth" },
+              { "label": "Casa", "value": "house" },
+              { "label": "Caminhão", "value": "truck" },
+              { "label": "Patinha", "value": "paw" }
+            ] },
+            { "key": "services.items.1.title", "label": "Título", "type": "text" },
+            { "key": "services.items.1.description", "label": "Descrição", "type": "textarea" },
+            { "key": "services.items.1.features.0", "label": "Diferencial 1", "type": "text" },
+            { "key": "services.items.1.features.1", "label": "Diferencial 2", "type": "text" },
+            { "key": "services.items.1.features.2", "label": "Diferencial 3", "type": "text" }
+          ]
+        },
+        {
+          "id": "service-3",
+          "label": "Serviço 3",
+          "fields": [
+            { "key": "services.items.2.icon", "label": "Ícone", "type": "select", "options": [
+              { "label": "Tesoura", "value": "scissors" },
+              { "label": "Estetoscópio", "value": "steth" },
+              { "label": "Casa", "value": "house" },
+              { "label": "Caminhão", "value": "truck" },
+              { "label": "Patinha", "value": "paw" }
+            ] },
+            { "key": "services.items.2.title", "label": "Título", "type": "text" },
+            { "key": "services.items.2.description", "label": "Descrição", "type": "textarea" },
+            { "key": "services.items.2.features.0", "label": "Diferencial 1", "type": "text" },
+            { "key": "services.items.2.features.1", "label": "Diferencial 2", "type": "text" },
+            { "key": "services.items.2.features.2", "label": "Diferencial 3", "type": "text" }
+          ]
+        },
+        {
+          "id": "service-4",
+          "label": "Serviço 4",
+          "fields": [
+            { "key": "services.items.3.icon", "label": "Ícone", "type": "select", "options": [
+              { "label": "Tesoura", "value": "scissors" },
+              { "label": "Estetoscópio", "value": "steth" },
+              { "label": "Casa", "value": "house" },
+              { "label": "Caminhão", "value": "truck" },
+              { "label": "Patinha", "value": "paw" }
+            ] },
+            { "key": "services.items.3.title", "label": "Título", "type": "text" },
+            { "key": "services.items.3.description", "label": "Descrição", "type": "textarea" },
+            { "key": "services.items.3.features.0", "label": "Diferencial 1", "type": "text" },
+            { "key": "services.items.3.features.1", "label": "Diferencial 2", "type": "text" },
+            { "key": "services.items.3.features.2", "label": "Diferencial 3", "type": "text" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plans",
+      "label": "Planos",
+      "groups": [
+        {
+          "id": "plans-header",
+          "label": "Cabeçalho",
+          "fields": [
+            { "key": "plans.enabled", "label": "Exibir seção", "type": "boolean" },
+            { "key": "plans.title", "label": "Título", "type": "text" },
+            { "key": "plans.subtitle", "label": "Subtítulo", "type": "textarea" }
+          ]
+        },
+        {
+          "id": "plan-1",
+          "label": "Plano 1",
+          "fields": [
+            { "key": "plans.items.0.name", "label": "Nome", "type": "text" },
+            { "key": "plans.items.0.pricePrefix", "label": "Prefixo do preço", "type": "text" },
+            { "key": "plans.items.0.price", "label": "Preço", "type": "text" },
+            { "key": "plans.items.0.priceSuffix", "label": "Sufixo do preço", "type": "text" },
+            { "key": "plans.items.0.features.0", "label": "Benefício 1", "type": "text" },
+            { "key": "plans.items.0.features.1", "label": "Benefício 2", "type": "text" },
+            { "key": "plans.items.0.features.2", "label": "Benefício 3", "type": "text" },
+            { "key": "plans.items.0.buttonLabel", "label": "Texto do botão", "type": "text" },
+            { "key": "plans.items.0.buttonHref", "label": "Link do botão", "type": "text" }
+          ]
+        },
+        {
+          "id": "plan-2",
+          "label": "Plano 2",
+          "fields": [
+            { "key": "plans.items.1.name", "label": "Nome", "type": "text" },
+            { "key": "plans.items.1.pricePrefix", "label": "Prefixo do preço", "type": "text" },
+            { "key": "plans.items.1.price", "label": "Preço", "type": "text" },
+            { "key": "plans.items.1.priceSuffix", "label": "Sufixo do preço", "type": "text" },
+            { "key": "plans.items.1.features.0", "label": "Benefício 1", "type": "text" },
+            { "key": "plans.items.1.features.1", "label": "Benefício 2", "type": "text" },
+            { "key": "plans.items.1.features.2", "label": "Benefício 3", "type": "text" },
+            { "key": "plans.items.1.badge", "label": "Selo", "type": "text" },
+            { "key": "plans.items.1.highlight", "label": "Destacar plano", "type": "boolean" },
+            { "key": "plans.items.1.buttonLabel", "label": "Texto do botão", "type": "text" },
+            { "key": "plans.items.1.buttonHref", "label": "Link do botão", "type": "text" }
+          ]
+        },
+        {
+          "id": "plan-3",
+          "label": "Plano 3",
+          "fields": [
+            { "key": "plans.items.2.name", "label": "Nome", "type": "text" },
+            { "key": "plans.items.2.pricePrefix", "label": "Prefixo do preço", "type": "text" },
+            { "key": "plans.items.2.price", "label": "Preço", "type": "text" },
+            { "key": "plans.items.2.priceSuffix", "label": "Sufixo do preço", "type": "text" },
+            { "key": "plans.items.2.features.0", "label": "Benefício 1", "type": "text" },
+            { "key": "plans.items.2.features.1", "label": "Benefício 2", "type": "text" },
+            { "key": "plans.items.2.features.2", "label": "Benefício 3", "type": "text" },
+            { "key": "plans.items.2.buttonLabel", "label": "Texto do botão", "type": "text" },
+            { "key": "plans.items.2.buttonHref", "label": "Link do botão", "type": "text" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "testimonials",
+      "label": "Depoimentos e galeria",
+      "groups": [
+        {
+          "id": "testimonials-header",
+          "label": "Depoimentos",
+          "fields": [
+            { "key": "testimonials.enabled", "label": "Exibir seção", "type": "boolean" },
+            { "key": "testimonials.title", "label": "Título", "type": "text" },
+            { "key": "testimonials.items.0.quote", "label": "Depoimento 1 - Texto", "type": "textarea" },
+            { "key": "testimonials.items.0.author", "label": "Depoimento 1 - Autor", "type": "text" },
+            { "key": "testimonials.items.1.quote", "label": "Depoimento 2 - Texto", "type": "textarea" },
+            { "key": "testimonials.items.1.author", "label": "Depoimento 2 - Autor", "type": "text" },
+            { "key": "testimonials.items.2.quote", "label": "Depoimento 3 - Texto", "type": "textarea" },
+            { "key": "testimonials.items.2.author", "label": "Depoimento 3 - Autor", "type": "text" }
+          ]
+        },
+        {
+          "id": "gallery",
+          "label": "Galeria",
+          "fields": [
+            { "key": "gallery.enabled", "label": "Exibir galeria", "type": "boolean" },
+            { "key": "gallery.title", "label": "Título", "type": "text" },
+            { "key": "gallery.subtitle", "label": "Subtítulo", "type": "textarea" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "faq-contact",
+      "label": "FAQ e contato",
+      "groups": [
+        {
+          "id": "faq",
+          "label": "Perguntas frequentes",
+          "fields": [
+            { "key": "faq.enabled", "label": "Exibir seção", "type": "boolean" },
+            { "key": "faq.title", "label": "Título", "type": "text" },
+            { "key": "faq.items.0.question", "label": "Pergunta 1", "type": "text" },
+            { "key": "faq.items.0.answer", "label": "Resposta 1", "type": "textarea" },
+            { "key": "faq.items.1.question", "label": "Pergunta 2", "type": "text" },
+            { "key": "faq.items.1.answer", "label": "Resposta 2", "type": "textarea" },
+            { "key": "faq.items.2.question", "label": "Pergunta 3", "type": "text" },
+            { "key": "faq.items.2.answer", "label": "Resposta 3", "type": "textarea" },
+            { "key": "faq.items.3.question", "label": "Pergunta 4", "type": "text" },
+            { "key": "faq.items.3.answer", "label": "Resposta 4", "type": "textarea" }
+          ]
+        },
+        {
+          "id": "contact",
+          "label": "Contato",
+          "fields": [
+            { "key": "contact.enabled", "label": "Exibir seção", "type": "boolean" },
+            { "key": "contact.title", "label": "Título", "type": "text" },
+            { "key": "contact.subtitle", "label": "Subtítulo", "type": "textarea" },
+            { "key": "contact.serviceOptions.0", "label": "Serviço 1", "type": "text" },
+            { "key": "contact.serviceOptions.1", "label": "Serviço 2", "type": "text" },
+            { "key": "contact.serviceOptions.2", "label": "Serviço 3", "type": "text" },
+            { "key": "contact.serviceOptions.3", "label": "Serviço 4", "type": "text" },
+            { "key": "contact.serviceOptions.4", "label": "Serviço 5", "type": "text" },
+            { "key": "contact.badges.0", "label": "Selo 1", "type": "text" },
+            { "key": "contact.badges.1", "label": "Selo 2", "type": "text" },
+            { "key": "contact.badges.2", "label": "Selo 3", "type": "text" },
+            { "key": "contact.primaryButton.label", "label": "Botão principal - Texto", "type": "text" },
+            { "key": "contact.primaryButton.href", "label": "Botão principal - Link", "type": "text" },
+            { "key": "contact.secondaryButton.label", "label": "Botão secundário - Texto", "type": "text" },
+            { "key": "contact.secondaryButton.href", "label": "Botão secundário - Link", "type": "text" },
+            { "key": "contact.disclaimer", "label": "Aviso", "type": "textarea" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "footer",
+      "label": "Rodapé e social",
+      "groups": [
+        {
+          "id": "footer-legal",
+          "label": "Rodapé",
+          "fields": [
+            { "key": "footer.legal", "label": "Texto legal", "type": "text" },
+            { "key": "footer.links.0.label", "label": "Link 1 - Texto", "type": "text" },
+            { "key": "footer.links.0.href", "label": "Link 1 - Destino", "type": "text" },
+            { "key": "footer.links.1.label", "label": "Link 2 - Texto", "type": "text" },
+            { "key": "footer.links.1.href", "label": "Link 2 - Destino", "type": "text" },
+            { "key": "footer.links.2.label", "label": "Link 3 - Texto", "type": "text" },
+            { "key": "footer.links.2.href", "label": "Link 3 - Destino", "type": "text" }
+          ]
+        },
+        {
+          "id": "social",
+          "label": "Redes sociais",
+          "fields": [
+            { "key": "social.instagram", "label": "Instagram", "type": "url" },
+            { "key": "social.tiktok", "label": "TikTok", "type": "url" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "form",
+      "label": "Formulário",
+      "groups": [
+        {
+          "id": "form-provider",
+          "label": "Provedor",
+          "fields": [
+            {
+              "key": "form.provider",
+              "label": "Provedor do formulário",
+              "type": "select",
+              "options": [
+                { "label": "WhatsApp", "value": "whatsapp" },
+                { "label": "Netlify", "value": "netlify" },
+                { "label": "Formspree", "value": "formspree" },
+                { "label": "EmailJS", "value": "emailjs" },
+                { "label": "Desativado", "value": "disabled" }
+              ]
+            },
+            { "key": "form.formspreeEndpoint", "label": "Endpoint Formspree", "type": "url" },
+            { "key": "form.emailjs.publicKey", "label": "EmailJS Public Key", "type": "text" },
+            { "key": "form.emailjs.serviceId", "label": "EmailJS Service ID", "type": "text" },
+            { "key": "form.emailjs.templateId", "label": "EmailJS Template ID", "type": "text" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "seo",
+      "label": "SEO e métricas",
+      "groups": [
+        {
+          "id": "seo-meta",
+          "label": "SEO",
+          "fields": [
+            { "key": "seo.pageTitle", "label": "Título da página", "type": "text", "required": true },
+            { "key": "seo.metaDescription", "label": "Descrição", "type": "textarea", "required": true },
+            { "key": "seo.ogImage", "label": "Imagem Open Graph", "type": "url" },
+            { "key": "seo.faviconEmoji", "label": "Emoji do favicon", "type": "text" }
+          ]
+        },
+        {
+          "id": "thankyou",
+          "label": "Página de obrigado",
+          "fields": [
+            { "key": "thankYouPage.title", "label": "Título", "type": "text" },
+            { "key": "thankYouPage.message", "label": "Mensagem", "type": "textarea" },
+            { "key": "thankYouPage.backButtonLabel", "label": "Botão voltar - Texto", "type": "text" },
+            { "key": "thankYouPage.backButtonHref", "label": "Botão voltar - Link", "type": "text" }
+          ]
+        },
+        {
+          "id": "pixels",
+          "label": "Pixels",
+          "fields": [
+            { "key": "pixels.ga4", "label": "Google Analytics 4", "type": "text" },
+            { "key": "pixels.facebook", "label": "Meta Pixel", "type": "text" },
+            { "key": "pixels.tiktok", "label": "TikTok Pixel", "type": "text" }
+          ]
+        }
+      ]
+    }
+  ]
+}
