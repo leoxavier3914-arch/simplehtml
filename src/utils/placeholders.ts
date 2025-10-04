@@ -6,7 +6,19 @@ export function flattenConfig(config: Record<string, unknown>, prefix = ""): Rec
   Object.entries(config).forEach(([key, value]) => {
     const dotted = prefix ? `${prefix}.${key}` : key;
 
-    if (value && typeof value === "object" && !Array.isArray(value)) {
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => {
+        const arrayKey = `${dotted}.${index}`;
+        if (item && typeof item === "object") {
+          Object.assign(result, flattenConfig(item as Record<string, unknown>, arrayKey));
+        } else if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") {
+          result[arrayKey] = String(item);
+        }
+      });
+      return;
+    }
+
+    if (value && typeof value === "object") {
       Object.assign(result, flattenConfig(value as Record<string, unknown>, dotted));
       return;
     }
