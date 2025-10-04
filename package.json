@@ -1,0 +1,38 @@
+{
+  "name": "simplehtml",
+  "version": "1.0.0",
+  "description": "MVP desktop para editar e publicar landing pages estáticas",
+  "main": "dist/index.html",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@tauri-apps/api": "^2.8.0",
+    "@tauri-apps/plugin-dialog": "^2.4.0",
+    "@tauri-apps/plugin-fs": "^2.4.2",
+    "@tauri-apps/plugin-http": "^2.5.2",
+    "@tauri-apps/plugin-os": "^2.3.1",
+    "@tauri-apps/plugin-shell": "^2.3.1",
+    "jszip": "^3.10.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "uuid": "^13.0.0",
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.8.4",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react-swc": "^4.1.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.9"
+  }
+}

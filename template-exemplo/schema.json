@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "templateName": "Landing básica",
+  "tabs": [
+    {
+      "id": "texts",
+      "label": "Textos",
+      "groups": [
+        {
+          "id": "hero",
+          "label": "Hero",
+          "description": "Título principal da landing page",
+          "fields": [
+            { "key": "texts.heroTitle", "label": "Título", "type": "text", "required": true, "placeholder": "Apresente seu produto" },
+            { "key": "texts.heroSubtitle", "label": "Subtítulo", "type": "textarea", "required": true },
+            { "key": "texts.ctaLabel", "label": "Texto do CTA", "type": "text", "required": true },
+            { "key": "texts.featuresTitle", "label": "Título da seção de benefícios", "type": "text", "required": true }
+          ]
+        },
+        {
+          "id": "features",
+          "label": "Benefícios",
+          "fields": [
+            { "key": "texts.featureOneTitle", "label": "Benefício 1 - Título", "type": "text", "required": true },
+            { "key": "texts.featureOneDescription", "label": "Benefício 1 - Descrição", "type": "textarea", "required": true },
+            { "key": "texts.featureTwoTitle", "label": "Benefício 2 - Título", "type": "text", "required": true },
+            { "key": "texts.featureTwoDescription", "label": "Benefício 2 - Descrição", "type": "textarea", "required": true },
+            { "key": "texts.featureThreeTitle", "label": "Benefício 3 - Título", "type": "text", "required": true },
+            { "key": "texts.featureThreeDescription", "label": "Benefício 3 - Descrição", "type": "textarea", "required": true }
+          ]
+        },
+        {
+          "id": "form",
+          "label": "Formulário",
+          "fields": [
+            { "key": "texts.formTitle", "label": "Título do formulário", "type": "text", "required": true },
+            { "key": "texts.formSubtitle", "label": "Subtítulo do formulário", "type": "textarea" },
+            { "key": "texts.formButton", "label": "Texto do botão", "type": "text", "required": true },
+            { "key": "texts.footer", "label": "Rodapé", "type": "text", "required": true }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "colors",
+      "label": "Cores",
+      "groups": [
+        {
+          "id": "palette",
+          "label": "Paleta",
+          "fields": [
+            { "key": "colors.heroBackground", "label": "Fundo hero", "type": "color", "defaultValue": "#6366f1" },
+            { "key": "colors.formBackground", "label": "Fundo formulário", "type": "color", "defaultValue": "#e0f2fe" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "images",
+      "label": "Imagens",
+      "groups": [
+        {
+          "id": "logo",
+          "label": "Identidade",
+          "fields": [
+            { "key": "images.logo", "label": "Logo", "type": "image", "required": true, "helperText": "PNG ou SVG" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "seo",
+      "label": "SEO",
+      "groups": [
+        {
+          "id": "meta",
+          "label": "Metadados",
+          "fields": [
+            { "key": "seo.title", "label": "Título da página", "type": "text", "required": true },
+            { "key": "seo.description", "label": "Descrição", "type": "textarea", "required": true }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "form",
+      "label": "Formulário",
+      "groups": [
+        {
+          "id": "provider",
+          "label": "Integração",
+          "description": "Escolha o provedor e configure o endpoint",
+          "fields": [
+            { "key": "form.endpoint", "label": "Endpoint do formulário", "type": "url", "placeholder": "https://" },
+            { "key": "form.ctaUrl", "label": "Link do CTA", "type": "url", "placeholder": "#lead" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "publish",
+      "label": "Publicação",
+      "groups": [
+        {
+          "id": "netlify",
+          "label": "Netlify",
+          "fields": [
+            { "key": "publication.customDomain", "label": "Domínio personalizado", "type": "text", "helperText": "// TODO: suporte a domínios" }
+          ]
+        }
+      ]
+    }
+  ]
+}

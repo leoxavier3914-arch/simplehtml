@@ -1,0 +1,82 @@
+:root {
+  color-scheme: light;
+  font-family: "Inter", system-ui, sans-serif;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+body {
+  margin: 0;
+}
+
+.container {
+  width: min(1120px, 90vw);
+  margin: 0 auto;
+  padding: 3rem 0;
+}
+
+.hero {
+  color: #fff;
+  text-align: center;
+  padding: 3rem 0 4rem;
+}
+
+.hero .logo {
+  max-height: 48px;
+  margin-bottom: 1.5rem;
+}
+
+.hero .cta {
+  display: inline-block;
+  margin-top: 2rem;
+  background: #fff;
+  color: #0f172a;
+  padding: 0.75rem 1.5rem;
+  border-radius: 999px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.features {
+  background: #fff;
+}
+
+.features .grid {
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.features article {
+  background: #f1f5f9;
+  padding: 1.5rem;
+  border-radius: 12px;
+}
+
+.lead-form form {
+  display: grid;
+  gap: 1rem;
+  max-width: 420px;
+}
+
+.lead-form input {
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border: none;
+}
+
+.lead-form button {
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border: none;
+  background: #0f172a;
+  color: #fff;
+  font-weight: 600;
+}
+
+.footer {
+  background: #0f172a;
+  color: #fff;
+  text-align: center;
+  padding: 1.5rem 0;
+}
