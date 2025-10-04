@@ -1097,7 +1097,7 @@ function transformHtmlFile(
         const placeholderTrimmed = placeholderRaw.trim();
         const placeholderLabelSource = descriptor ?? (placeholderTrimmed || undefined);
         const baseLabel = placeholderLabelSource
-          ? `Placeholder (${truncateLabel(placeholderLabelSource)})`
+          ? truncateLabel(placeholderLabelSource)
           : `Placeholder ${index}`;
 
         const field: SchemaField = {
@@ -1162,7 +1162,7 @@ function transformHtmlFile(
         const placeholderTrimmed = placeholderRaw.trim();
         const placeholderLabelSource = descriptor ?? (placeholderTrimmed || undefined);
         const baseLabel = placeholderLabelSource
-          ? `Placeholder (${truncateLabel(placeholderLabelSource)})`
+          ? truncateLabel(placeholderLabelSource)
           : `Placeholder ${index}`;
 
         const field: SchemaField = {
