@@ -171,6 +171,109 @@ const TAG_KEY_PREFIX: Record<string, string> = {
   label: "label",
 };
 
+type BusinessFieldType = "phone" | "email" | "whatsapp" | "address" | "mapUrl";
+type BusinessFieldCategory = "contact" | "location";
+
+interface BusinessFieldConfig {
+  baseKey: string;
+  label: string;
+  altLabel?: string;
+  helperText?: string;
+  type: SchemaField["type"];
+  category: BusinessFieldCategory;
+}
+
+const BUSINESS_FIELD_CONFIGS: Record<BusinessFieldType, BusinessFieldConfig> = {
+  phone: {
+    baseKey: "business.phone",
+    label: "Telefone principal",
+    altLabel: "Telefone adicional",
+    helperText:
+      "Utilizado em links tel: e em textos do site. Inclua DDI + DDD + número.",
+    type: "text",
+    category: "contact",
+  },
+  email: {
+    baseKey: "business.email",
+    label: "E-mail de contato",
+    altLabel: "E-mail adicional",
+    helperText: "Atualiza links mailto e textos com o e-mail da empresa.",
+    type: "text",
+    category: "contact",
+  },
+  whatsapp: {
+    baseKey: "business.whatsapp",
+    label: "WhatsApp",
+    altLabel: "WhatsApp adicional",
+    helperText: "Informe o número com DDI e DDD. Esse valor é usado em links wa.me.",
+    type: "text",
+    category: "contact",
+  },
+  address: {
+    baseKey: "business.address",
+    label: "Endereço",
+    altLabel: "Endereço adicional",
+    helperText: "Texto exibido para o endereço do negócio.",
+    type: "textarea",
+    category: "location",
+  },
+  mapUrl: {
+    baseKey: "business.mapUrl",
+    label: "Link do mapa",
+    altLabel: "Link do mapa adicional",
+    helperText: "URL utilizada para abrir o endereço em serviços de mapa.",
+    type: "url",
+    category: "location",
+  },
+};
+
+interface BusinessFieldEntry {
+  field: SchemaField;
+  type: BusinessFieldType;
+  category: BusinessFieldCategory;
+  order: number;
+}
+
+interface BusinessContext {
+  fields: Map<string, BusinessFieldEntry>;
+  valueToKey: Map<string, string>;
+  keyUsage: Map<BusinessFieldType, number>;
+  orderCounter: number;
+  usedKeys: Set<string>;
+}
+
+interface BusinessTextDetection {
+  type: BusinessFieldType;
+  value: string;
+  leading: string;
+  trailing: string;
+}
+
+interface BusinessHrefDetection {
+  type: BusinessFieldType;
+  value: string;
+  prefix?: string;
+  suffix?: string;
+}
+
+const EMAIL_TEXT_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
+const ADDRESS_KEYWORDS = [
+  /\b(rua|avenida|av\.?|rodovia|estrada|praça|praca|bairro|quadra|lote|travessa|estr\.?)/i,
+  /\b(street|st\.?|road|rd\.?|avenue|ave\.?|boulevard|blvd\.?|square)/i,
+  /\bend(ere|ereço|ereco|address)\b/i,
+  /\b(cidade|city|estado|state)\b/i,
+];
+const MAP_HREF_PATTERNS = [
+  /maps\.google/i,
+  /google\.[a-z.]+\/maps/i,
+  /goo\.gl\/maps/i,
+  /maps\.app\.goo\.gl/i,
+  /maps\.apple\.com/i,
+  /waze\.com/i,
+  /openstreetmap\.org/i,
+];
+const PHONE_MIN_DIGITS = 8;
+
 export function autoGenerateTemplate(
   templateLabel: string,
   originalFiles: TemplateFile[],
@@ -184,6 +287,7 @@ export function autoGenerateTemplate(
   const seoGroups: SchemaGroup[] = [];
   const colorGroups: SchemaGroup[] = [];
   const processedFiles: TemplateFile[] = [];
+  const businessContext = createBusinessContext();
   let hasFields = false;
 
   originalFiles.forEach((file) => {
@@ -207,7 +311,7 @@ export function autoGenerateTemplate(
     }
 
     const baseKey = `auto.${sanitizeKey(file.path)}`;
-    const result = transformHtmlFile(file, baseKey, defaults);
+    const result = transformHtmlFile(file, baseKey, defaults, businessContext);
 
     processedFiles.push({ path: file.path, contents: result.contents });
 
@@ -238,6 +342,11 @@ export function autoGenerateTemplate(
   const tabs: SchemaTab[] = [
     ...contentTabs.map((tab) => ({ id: tab.id, label: tab.label, groups: tab.groups })),
   ];
+
+  const businessTab = buildBusinessInfoTab(businessContext);
+  if (businessTab) {
+    tabs.push(businessTab);
+  }
 
   if (colorGroups.length > 0) {
     tabs.push({
@@ -313,6 +422,7 @@ function transformHtmlFile(
   file: TemplateFile,
   baseKey: string,
   defaults: Record<string, unknown>,
+  businessContext: BusinessContext,
 ): TransformResult {
   const parser = new DOMParser();
   const contents = file.contents;
@@ -337,6 +447,7 @@ function transformHtmlFile(
   const sectionKeySet = new Set<string>();
   const cardKeySet = new Set<string>();
   const cardMap = new Map<Element, CardContext>();
+  const businessTextDetections = new Map<Element, BusinessTextDetection>();
 
   // Meta tags first (SEO)
   const metaElements = Array.from(doc.querySelectorAll("meta[name][content]"));
@@ -389,6 +500,21 @@ function transformHtmlFile(
     if (value.includes("{{")) {
       current = walker.nextNode();
       continue;
+    }
+
+    if (parent.tagName.toLowerCase() === "a" && parent.childNodes.length === 1) {
+      const detection = detectBusinessText(value, parent as HTMLAnchorElement);
+      if (detection) {
+        const leading = rawText.match(/^\s*/)?.[0] ?? "";
+        const trailing = rawText.match(/\s*$/)?.[0] ?? "";
+        businessTextDetections.set(parent, {
+          ...detection,
+          leading,
+          trailing,
+        });
+        current = walker.nextNode();
+        continue;
+      }
     }
 
     const section = getSectionContext(parent, {
@@ -480,6 +606,33 @@ function transformHtmlFile(
     const value = href.trim();
     if (!value || value.includes("{{")) return;
     if (URL_SKIP_PREFIXES.some((prefix) => value.toLowerCase().startsWith(prefix))) return;
+
+    const textDetection = businessTextDetections.get(anchor);
+    const hrefDetection = detectBusinessHref(value);
+
+    if (hrefDetection || textDetection) {
+      if (textDetection) {
+        const textResult = upsertBusinessFieldValue(businessContext, textDetection.type, textDetection.value);
+        if (textResult.updatedDefault) {
+          setValue(textResult.key, defaults, textResult.defaultValue);
+        }
+        anchor.textContent = `${textDetection.leading}{{${textResult.key}}}${textDetection.trailing}`;
+      }
+
+      if (hrefDetection) {
+        const preserveExisting =
+          !!textDetection && textDetection.type === hrefDetection.type;
+        const hrefResult = upsertBusinessFieldValue(businessContext, hrefDetection.type, hrefDetection.value, {
+          preserveExisting,
+        });
+        if (hrefResult.updatedDefault) {
+          setValue(hrefResult.key, defaults, hrefResult.defaultValue);
+        }
+        anchor.setAttribute("href", buildBusinessHrefPlaceholder(hrefResult.key, hrefDetection));
+      }
+
+      return;
+    }
 
     const section = getSectionContext(anchor, {
       sectionMap,
@@ -764,6 +917,348 @@ function buildSeoTabs(seoGroups: SchemaGroup[]): SchemaTab[] {
       groups: seoGroups,
     },
   ];
+}
+
+function buildBusinessInfoTab(context: BusinessContext): SchemaTab | null {
+  const entries = Array.from(context.fields.values()).sort((a, b) => a.order - b.order);
+  if (!entries.length) {
+    return null;
+  }
+
+  const contactFields = entries
+    .filter((entry) => entry.category === "contact")
+    .map((entry) => entry.field);
+  const locationFields = entries
+    .filter((entry) => entry.category === "location")
+    .map((entry) => entry.field);
+
+  const groups: SchemaGroup[] = [];
+
+  if (contactFields.length) {
+    groups.push({
+      id: "auto-business-contact",
+      label: "Contato e comunicação",
+      description: "Dados unificados de telefone, e-mail e WhatsApp detectados automaticamente.",
+      fields: contactFields,
+    });
+  }
+
+  if (locationFields.length) {
+    groups.push({
+      id: "auto-business-location",
+      label: "Endereço e localização",
+      description: "Links e textos relacionados ao endereço do negócio.",
+      fields: locationFields,
+    });
+  }
+
+  if (!groups.length) {
+    return null;
+  }
+
+  return {
+    id: "auto-business",
+    label: "Informações do negócio",
+    groups,
+  };
+}
+
+function createBusinessContext(): BusinessContext {
+  return {
+    fields: new Map(),
+    valueToKey: new Map(),
+    keyUsage: new Map(),
+    orderCounter: 0,
+    usedKeys: new Set(),
+  };
+}
+
+interface BusinessUpsertOptions {
+  preserveExisting?: boolean;
+}
+
+interface BusinessUpsertResult {
+  key: string;
+  value: string;
+  defaultValue: string;
+  isNew: boolean;
+  updatedDefault: boolean;
+}
+
+function upsertBusinessFieldValue(
+  context: BusinessContext,
+  type: BusinessFieldType,
+  rawValue: string,
+  options: BusinessUpsertOptions = {},
+): BusinessUpsertResult {
+  const config = BUSINESS_FIELD_CONFIGS[type];
+  const formattedValue = formatBusinessValue(type, rawValue);
+  const normalizedValue = normalizeBusinessValue(type, rawValue);
+  const dedupeKey = `${type}:${normalizedValue}`;
+
+  const existingKey = context.valueToKey.get(dedupeKey);
+  if (existingKey) {
+    const entry = context.fields.get(existingKey);
+    if (entry) {
+      let updatedDefault = false;
+      if (!options.preserveExisting && shouldReplaceBusinessValue(entry.field.defaultValue, formattedValue, type)) {
+        entry.field.defaultValue = formattedValue;
+        updatedDefault = true;
+      }
+
+      return {
+        key: existingKey,
+        value: formattedValue,
+        defaultValue: (entry.field.defaultValue as string | undefined) ?? formattedValue,
+        isNew: false,
+        updatedDefault,
+      };
+    }
+
+    return {
+      key: existingKey,
+      value: formattedValue,
+      defaultValue: formattedValue,
+      isNew: false,
+      updatedDefault: false,
+    };
+  }
+
+  let highestSuffix = context.keyUsage.get(type) ?? 0;
+  let candidateKey = config.baseKey;
+  let label = config.label;
+
+  if (highestSuffix === 0 && !context.usedKeys.has(candidateKey)) {
+    highestSuffix = 1;
+  } else {
+    let suffix = Math.max(2, highestSuffix + 1);
+    candidateKey = `${config.baseKey}${suffix}`;
+    while (context.usedKeys.has(candidateKey)) {
+      suffix += 1;
+      candidateKey = `${config.baseKey}${suffix}`;
+    }
+    const altBase = config.altLabel ?? config.label;
+    label = suffix === 2 ? altBase : `${altBase} ${suffix - 1}`;
+    highestSuffix = suffix;
+  }
+
+  context.usedKeys.add(candidateKey);
+  context.keyUsage.set(type, highestSuffix);
+
+  const field: SchemaField = {
+    key: candidateKey,
+    label,
+    type: config.type,
+    helperText: config.helperText,
+    defaultValue: formattedValue,
+  };
+
+  const entry: BusinessFieldEntry = {
+    field,
+    type,
+    category: config.category,
+    order: context.orderCounter++,
+  };
+
+  context.fields.set(candidateKey, entry);
+  context.valueToKey.set(dedupeKey, candidateKey);
+
+  return {
+    key: candidateKey,
+    value: formattedValue,
+    defaultValue: formattedValue,
+    isNew: true,
+    updatedDefault: true,
+  };
+}
+
+function buildBusinessHrefPlaceholder(key: string, detection: BusinessHrefDetection): string {
+  const prefix = detection.prefix ?? "";
+  const suffix = detection.suffix ?? "";
+  if (!prefix && !suffix) {
+    return `{{${key}}}`;
+  }
+  return `${prefix}{{${key}}}${suffix}`;
+}
+
+function detectBusinessHref(value: string): BusinessHrefDetection | null {
+  const trimmed = value.trim();
+  const lower = trimmed.toLowerCase();
+
+  if (lower.startsWith("tel:")) {
+    const { core, suffix } = splitValueAndSuffix(trimmed.slice(4));
+    if (!core) {
+      return null;
+    }
+    return { type: "phone", value: core, prefix: "tel:", suffix };
+  }
+
+  if (lower.startsWith("mailto:")) {
+    const { core, suffix } = splitValueAndSuffix(trimmed.slice(7));
+    if (!core) {
+      return null;
+    }
+    return { type: "email", value: core, prefix: "mailto:", suffix };
+  }
+
+  const whatsappDetection = parseWhatsappHref(trimmed);
+  if (whatsappDetection) {
+    return whatsappDetection;
+  }
+
+  if (isMapHref(trimmed)) {
+    return { type: "mapUrl", value: trimmed };
+  }
+
+  return null;
+}
+
+function splitValueAndSuffix(raw: string): { core: string; suffix: string } {
+  const questionIndex = raw.indexOf("?");
+  if (questionIndex === -1) {
+    return { core: raw.trim(), suffix: "" };
+  }
+
+  return {
+    core: raw.slice(0, questionIndex).trim(),
+    suffix: raw.slice(questionIndex),
+  };
+}
+
+function parseWhatsappHref(value: string): BusinessHrefDetection | null {
+  try {
+    const hasProtocol = /^https?:/i.test(value);
+    const url = new URL(value, hasProtocol ? undefined : "https://wa.me");
+    const host = url.hostname.toLowerCase();
+    const hash = url.hash ?? "";
+
+    if (host.includes("wa.me")) {
+      const number = decodeURIComponent(url.pathname.replace(/\//g, "").trim());
+      if (!number) {
+        return null;
+      }
+      return {
+        type: "whatsapp",
+        value: number,
+        prefix: `${url.protocol}//${url.host}/`,
+        suffix: `${url.search}${hash}`,
+      };
+    }
+
+    if (host.includes("whatsapp.com")) {
+      const params = new URLSearchParams(url.search);
+      const phone = params.get("phone") ?? undefined;
+      if (!phone) {
+        return null;
+      }
+      params.delete("phone");
+      const remaining = params.toString();
+      const suffixParams = remaining ? `&${remaining}` : "";
+      return {
+        type: "whatsapp",
+        value: phone,
+        prefix: `${url.origin}${url.pathname}?phone=`,
+        suffix: `${suffixParams}${hash}`,
+      };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function detectBusinessText(
+  value: string,
+  anchor: HTMLAnchorElement,
+): Omit<BusinessTextDetection, "leading" | "trailing"> | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const normalizedSpace = trimmed.replace(/\s+/g, " ");
+  const href = anchor.getAttribute("href") ?? "";
+  const lowerHref = href.toLowerCase();
+
+  if (EMAIL_TEXT_PATTERN.test(normalizedSpace)) {
+    return { type: "email", value: normalizedSpace };
+  }
+
+  const digitCount = normalizedSpace.replace(/\D/g, "").length;
+  if (digitCount >= PHONE_MIN_DIGITS) {
+    if (lowerHref.includes("wa.me") || lowerHref.includes("whatsapp")) {
+      return { type: "whatsapp", value: normalizedSpace };
+    }
+    if (lowerHref.startsWith("tel:") || lowerHref === "#" || lowerHref === "") {
+      return { type: "phone", value: normalizedSpace };
+    }
+  }
+
+  if (isMapHref(href)) {
+    const lowerText = normalizedSpace.toLowerCase();
+    if (ADDRESS_KEYWORDS.some((pattern) => pattern.test(lowerText))) {
+      return { type: "address", value: normalizedSpace };
+    }
+  }
+
+  return null;
+}
+
+function isMapHref(value: string): boolean {
+  return MAP_HREF_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+function normalizeBusinessValue(type: BusinessFieldType, rawValue: string): string {
+  const trimmed = rawValue.trim();
+  switch (type) {
+    case "phone":
+    case "whatsapp": {
+      return trimmed.replace(/[^0-9]/g, "");
+    }
+    case "email":
+      return trimmed.toLowerCase();
+    case "address":
+      return trimmed.replace(/\s+/g, " ").toLowerCase();
+    case "mapUrl":
+      return trimmed.replace(/\s+/g, "");
+    default:
+      return trimmed;
+  }
+}
+
+function formatBusinessValue(type: BusinessFieldType, rawValue: string): string {
+  const trimmed = rawValue.trim();
+  if (type === "email") {
+    return trimmed.toLowerCase();
+  }
+  return trimmed;
+}
+
+function shouldReplaceBusinessValue(existing: unknown, candidate: string, type: BusinessFieldType): boolean {
+  if (typeof existing !== "string") {
+    return true;
+  }
+
+  const current = existing.trim();
+  const next = candidate.trim();
+  if (!current) {
+    return true;
+  }
+
+  if (current === next) {
+    return false;
+  }
+
+  if (next.length > current.length) {
+    return true;
+  }
+
+  if (type === "email") {
+    return current.toLowerCase() !== next.toLowerCase();
+  }
+
+  return false;
 }
 
 function buildIntegrationsTab(): SchemaTab {
