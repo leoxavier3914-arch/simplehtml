@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{seo.title}}</title>
+    <meta name="description" content="{{seo.description}}" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="hero" style="background: {{colors.heroBackground}};">
+      <div class="container">
+        <img class="logo" src="{{images.logo}}" alt="Logo" />
+        <h1>{{texts.heroTitle}}</h1>
+        <p>{{texts.heroSubtitle}}</p>
+        <a class="cta" href="{{form.ctaUrl}}">{{texts.ctaLabel}}</a>
+      </div>
+    </header>
+
+    <section class="features">
+      <div class="container">
+        <h2>{{texts.featuresTitle}}</h2>
+        <div class="grid">
+          <article>
+            <h3>{{texts.featureOneTitle}}</h3>
+            <p>{{texts.featureOneDescription}}</p>
+          </article>
+          <article>
+            <h3>{{texts.featureTwoTitle}}</h3>
+            <p>{{texts.featureTwoDescription}}</p>
+          </article>
+          <article>
+            <h3>{{texts.featureThreeTitle}}</h3>
+            <p>{{texts.featureThreeDescription}}</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="lead-form" style="background: {{colors.formBackground}};">
+      <div class="container">
+        <h2>{{texts.formTitle}}</h2>
+        <p>{{texts.formSubtitle}}</p>
+        <form action="{{form.endpoint}}" method="POST" data-netlify="{{form.netlify.dataNetlify}}">
+          <label>
+            Nome
+            <input type="text" name="name" placeholder="Seu nome" required />
+          </label>
+          <label>
+            Email
+            <input type="email" name="email" placeholder="Seu melhor email" required />
+          </label>
+          <button type="submit">{{texts.formButton}}</button>
+        </form>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="container">
+        <small>{{texts.footer}}</small>
+      </div>
+    </footer>
+
+    <script src="scripts.js" defer></script>
+  </body>
+</html>

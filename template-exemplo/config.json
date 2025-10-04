@@ -1,0 +1,40 @@
+{
+  "texts": {
+    "heroTitle": "Venda landing pages em minutos",
+    "heroSubtitle": "Personalize textos, cores e publique direto na Netlify com o simplehtml Studio.",
+    "ctaLabel": "Quero lançar agora",
+    "featuresTitle": "Por que escolher nossa landing?",
+    "featureOneTitle": "Visual profissional",
+    "featureOneDescription": "Templates responsivos prontos para converter.",
+    "featureTwoTitle": "Fácil de editar",
+    "featureTwoDescription": "Formulários gerados a partir do schema, sem código.",
+    "featureThreeTitle": "Publicação 1-clique",
+    "featureThreeDescription": "Integração com Netlify incluída no MVP.",
+    "formTitle": "Receba novidades",
+    "formSubtitle": "Cadastre-se para receber atualizações e ofertas exclusivas.",
+    "formButton": "Enviar",
+    "footer": "© {{seo.title}}. Todos os direitos reservados."
+  },
+  "colors": {
+    "heroBackground": "#6366f1",
+    "formBackground": "#e0f2fe"
+  },
+  "images": {
+    "logo": "assets/logo.svg"
+  },
+  "seo": {
+    "title": "Landing pronta em instantes",
+    "description": "Use o simplehtml Studio para editar e publicar landing pages estáticas com poucos cliques."
+  },
+  "form": {
+    "provider": "none",
+    "endpoint": "https://formspree.io/f/demo",
+    "ctaUrl": "#lead",
+    "netlify": {
+      "dataNetlify": false
+    }
+  },
+  "publication": {
+    "customDomain": ""
+  }
+}
