@@ -7,9 +7,28 @@
 
 (function applySiteConfig() {
   const fallbackConfig = {{ __CONFIG__ }};
-  if (typeof window.SITE_CONFIG === "object" && window.SITE_CONFIG !== null) {
-    window.SITE_CONFIG = { ...fallbackConfig, ...window.SITE_CONFIG };
-  } else {
-    window.SITE_CONFIG = fallbackConfig;
-  }
+
+  const applyConfig = (config) => {
+    const currentConfig =
+      typeof window.SITE_CONFIG === "object" && window.SITE_CONFIG !== null
+        ? window.SITE_CONFIG
+        : {};
+    window.SITE_CONFIG = { ...fallbackConfig, ...currentConfig, ...config };
+  };
+
+  applyConfig();
+
+  fetch("./config.json", { cache: "no-cache" })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+      return response.json();
+    })
+    .then((config) => {
+      applyConfig(config);
+    })
+    .catch((error) => {
+      console.warn("Não foi possível carregar config.json; usando configuração padrão.", error);
+    });
 })();
