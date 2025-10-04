@@ -19,6 +19,7 @@ interface TransformResult {
   contents: string;
   contentTabs: GeneratedTab[];
   seoGroups: SchemaGroup[];
+  colorGroups: SchemaGroup[];
   hasFields: boolean;
 }
 
@@ -26,6 +27,18 @@ interface CssTransformResult {
   contents: string;
   colorGroups: SchemaGroup[];
   hasFields: boolean;
+}
+
+interface TextReplacement {
+  start: number;
+  end: number;
+  replacement: string;
+}
+
+interface ColorDetection {
+  defaultValue: string;
+  type: SchemaField["type"];
+  important?: string;
 }
 
 interface FieldOwnerContext {
@@ -223,6 +236,7 @@ export function autoGenerateTemplate(
         }
       });
       seoGroups.push(...result.seoGroups);
+      colorGroups.push(...result.colorGroups);
     }
   });
 
@@ -267,32 +281,87 @@ function transformCssFile(
   const colorKeySet = new Set<string>();
   const variableKeyMap = new Map<string, string>();
   const colorFields: SchemaField[] = [];
-  const pattern = /(--[a-zA-Z0-9_-]+)(\s*:\s*)(#[0-9a-fA-F]{3,6})\b/g;
+  const variablePattern = /(--[a-zA-Z0-9_-]+)(\s*:\s*)(#[0-9a-fA-F]{3,8})\b/g;
 
-  let contents = file.contents.replace(pattern, (match, varName: string, separator: string, colorValue: string) => {
-    let fieldKey = variableKeyMap.get(varName);
+  let contents = file.contents.replace(
+    variablePattern,
+    (match, varName: string, separator: string, colorValue: string) => {
+      let fieldKey = variableKeyMap.get(varName);
 
-    if (!fieldKey) {
-      const cleanedVar = sanitizeKey(varName.replace(/^--/, ""));
-      const uniqueVar = ensureUniqueKey(cleanedVar || "cor", colorKeySet, "cor");
-      fieldKey = `${baseKey}.colors.${uniqueVar}`;
-      variableKeyMap.set(varName, fieldKey);
+      if (!fieldKey) {
+        const cleanedVar = sanitizeKey(varName.replace(/^--/, ""));
+        const uniqueVar = ensureUniqueKey(cleanedVar || "cor", colorKeySet, "cor");
+        fieldKey = `${baseKey}.colors.${uniqueVar}`;
+        variableKeyMap.set(varName, fieldKey);
 
-      const fieldLabelBase = formatLabel(varName.replace(/^--/, "")) || uniqueVar;
-      const field: SchemaField = {
-        key: fieldKey,
-        label: `Cor ${fieldLabelBase}`,
-        type: "color",
-        defaultValue: colorValue,
-        helperText: `Variável CSS ${varName}`,
-      };
+        const fieldLabelBase = formatLabel(varName.replace(/^--/, "")) || uniqueVar;
+        const field: SchemaField = {
+          key: fieldKey,
+          label: `Cor ${fieldLabelBase}`,
+          type: "color",
+          defaultValue: colorValue,
+          helperText: `Variável CSS ${varName}`,
+        };
 
-      colorFields.push(field);
-      setValue(fieldKey, defaults, colorValue);
+        colorFields.push(field);
+        setValue(fieldKey, defaults, colorValue);
+      }
+
+      return `${varName}${separator}{{${fieldKey}}}`;
+    },
+  );
+
+  const cssReplacements: TextReplacement[] = [];
+  const scanSource = contents;
+  const propertyPattern = /([\w-]+)(\s*:\s*)([^;{}]+)(;?)/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = propertyPattern.exec(scanSource))) {
+    const propertyName = match[1].trim().toLowerCase();
+    if (!isColorProperty(propertyName)) {
+      continue;
     }
 
-    return `${varName}${separator}{{${fieldKey}}}`;
-  });
+    const rawValueSegment = match[3];
+    const detection = detectColorValue(propertyName, rawValueSegment);
+    if (!detection) {
+      continue;
+    }
+
+    const selector = extractSelectorForIndex(scanSource, match.index);
+    if (!selector) {
+      continue;
+    }
+
+    const selectorForLabel = selector.split(",")[0]?.trim() ?? selector;
+    const keyBase = buildCssColorKeyBase(selectorForLabel, propertyName);
+    const uniqueKey = ensureUniqueKey(keyBase, colorKeySet, propertyName.replace(/-+/g, "_") || "cor");
+    const fieldKey = `${baseKey}.colors.${uniqueKey}`;
+
+    const field: SchemaField = {
+      key: fieldKey,
+      label: buildCssColorLabel(selectorForLabel, propertyName, detection.type),
+      type: detection.type,
+      defaultValue: detection.defaultValue,
+      helperText: `Propriedade ${propertyName} no seletor ${selectorForLabel}`,
+    };
+
+    colorFields.push(field);
+    setValue(fieldKey, defaults, detection.defaultValue);
+
+    const valueStart = match.index + match[1].length + match[2].length;
+    const valueEnd = valueStart + rawValueSegment.length;
+    const leading = rawValueSegment.match(/^\s*/)?.[0] ?? "";
+    const trailing = rawValueSegment.match(/\s*$/)?.[0] ?? "";
+    const importantSuffix = detection.important ? ` ${detection.important}` : "";
+    const replacement = `${leading}{{${fieldKey}}}${importantSuffix}${trailing}`;
+
+    cssReplacements.push({ start: valueStart, end: valueEnd, replacement });
+  }
+
+  if (cssReplacements.length > 0) {
+    contents = applyTextReplacements(scanSource, cssReplacements);
+  }
 
   if (!colorFields.length) {
     return { contents: file.contents, colorGroups: [], hasFields: false };
@@ -322,15 +391,17 @@ function transformHtmlFile(
   const doc = parser.parseFromString(htmlToParse, "text/html");
 
   if (!doc || doc.querySelector("parsererror")) {
-    return { contents, contentTabs: [], seoGroups: [], hasFields: false };
+    return { contents, contentTabs: [], seoGroups: [], colorGroups: [], hasFields: false };
   }
 
   const root: Element | null = isFragment ? doc.body : doc.documentElement;
   if (!root) {
-    return { contents, contentTabs: [], seoGroups: [], hasFields: false };
+    return { contents, contentTabs: [], seoGroups: [], colorGroups: [], hasFields: false };
   }
 
   const seoFields: SchemaField[] = [];
+  const inlineColorFields: SchemaField[] = [];
+  const inlineColorKeySet = new Set<string>();
   const sectionContexts: SectionContext[] = [];
   const sectionMap = new Map<Element, SectionContext>();
   const sectionSignatureMap = new Map<string, SectionContext>();
@@ -515,6 +586,64 @@ function transformHtmlFile(
     anchor.setAttribute("href", `{{${key}}}`);
   });
 
+  const styledElements = Array.from(root.querySelectorAll("[style]"));
+  styledElements.forEach((element) => {
+    const styleValue = element.getAttribute("style");
+    if (!styleValue) {
+      return;
+    }
+
+    const replacements: TextReplacement[] = [];
+    const pattern = /([\w-]+)(\s*:\s*)([^;]+)(;?)/g;
+    let styleMatch: RegExpExecArray | null;
+
+    while ((styleMatch = pattern.exec(styleValue))) {
+      const propertyName = styleMatch[1].trim().toLowerCase();
+      if (!isColorProperty(propertyName)) {
+        continue;
+      }
+
+      const rawSegment = styleMatch[3];
+      const detection = detectColorValue(propertyName, rawSegment);
+      if (!detection) {
+        continue;
+      }
+
+      const keyBase = buildInlineColorKeyBase(element, propertyName);
+      const uniqueKey = ensureUniqueKey(
+        keyBase,
+        inlineColorKeySet,
+        propertyName.replace(/-+/g, "_") || "cor",
+      );
+      const fieldKey = `${baseKey}.colors.${uniqueKey}`;
+
+      const field: SchemaField = {
+        key: fieldKey,
+        label: buildInlineColorLabel(element, propertyName, detection.type),
+        type: detection.type,
+        defaultValue: detection.defaultValue,
+        helperText: `Estilo inline ${propertyName} em ${formatElementDescriptor(element)}`,
+      };
+
+      inlineColorFields.push(field);
+      setValue(fieldKey, defaults, detection.defaultValue);
+
+      const valueStart = styleMatch.index + styleMatch[1].length + styleMatch[2].length;
+      const valueEnd = valueStart + rawSegment.length;
+      const leading = rawSegment.match(/^\s*/)?.[0] ?? "";
+      const trailing = rawSegment.match(/\s*$/)?.[0] ?? "";
+      const importantSuffix = detection.important ? ` ${detection.important}` : "";
+      const replacement = `${leading}{{${fieldKey}}}${importantSuffix}${trailing}`;
+
+      replacements.push({ start: valueStart, end: valueEnd, replacement });
+    }
+
+    if (replacements.length > 0) {
+      const updated = applyTextReplacements(styleValue, replacements);
+      element.setAttribute("style", updated);
+    }
+  });
+
   let serialized: string;
   if (isFragment) {
     serialized = root.innerHTML;
@@ -535,14 +664,26 @@ function transformHtmlFile(
         },
       ]
     : [];
+  const colorGroups = inlineColorFields.length
+    ? [
+        {
+          id: `${schemaIdPrefix(`${baseKey}.inline-colors`)}-palette`,
+          label: `${displayLabelForFile(file.path)} · Cores`,
+          description: "Cores detectadas automaticamente no HTML.",
+          fields: inlineColorFields,
+        },
+      ]
+    : [];
 
   return {
     contents: serialized,
     contentTabs,
     seoGroups,
+    colorGroups,
     hasFields:
       contentTabs.some((tab) => tab.groups.some((group) => group.fields.length > 0)) ||
-      seoGroups.length > 0,
+      seoGroups.length > 0 ||
+      colorGroups.length > 0,
   };
 }
 
@@ -659,6 +800,197 @@ function getCardContext(element: Element, section: SectionContext, options: Card
   }
 
   return null;
+}
+
+const COLOR_PROPERTY_EXACT = new Set([
+  "background",
+  "background-image",
+  "background-color",
+  "fill",
+  "stroke",
+]);
+
+const COLOR_KEYWORDS = new Set(
+  [
+    "white",
+    "black",
+    "red",
+    "blue",
+    "green",
+    "yellow",
+    "orange",
+    "purple",
+    "pink",
+    "gray",
+    "grey",
+    "silver",
+    "gold",
+    "beige",
+    "brown",
+    "cyan",
+    "magenta",
+    "lime",
+    "teal",
+    "navy",
+    "maroon",
+    "olive",
+    "aqua",
+    "fuchsia",
+    "indigo",
+    "violet",
+    "transparent",
+  ].map((keyword) => keyword.toLowerCase()),
+);
+
+const HEX_COLOR_REGEX = /^#(?:[0-9a-f]{3,8})$/i;
+const RGB_COLOR_REGEX = /^rgba?\([^)]*\)$/i;
+const HSL_COLOR_REGEX = /^hsla?\([^)]*\)$/i;
+
+function applyTextReplacements(source: string, replacements: TextReplacement[]): string {
+  if (!replacements.length) {
+    return source;
+  }
+
+  const ordered = [...replacements].sort((a, b) => a.start - b.start);
+  let result = "";
+  let lastIndex = 0;
+
+  ordered.forEach(({ start, end, replacement }) => {
+    result += source.slice(lastIndex, start);
+    result += replacement;
+    lastIndex = end;
+  });
+
+  result += source.slice(lastIndex);
+  return result;
+}
+
+function isColorProperty(property: string): boolean {
+  if (!property || property.startsWith("--")) {
+    return false;
+  }
+
+  return COLOR_PROPERTY_EXACT.has(property) || property.endsWith("color");
+}
+
+function detectColorValue(_property: string, rawValue: string): ColorDetection | null {
+  const trimmed = rawValue.trim();
+  if (!trimmed || trimmed.includes("{{")) {
+    return null;
+  }
+
+  const { value, important } = splitImportant(trimmed);
+  if (!value) {
+    return null;
+  }
+
+  if (/var\(/i.test(value) || /(url\s*\()/i.test(value)) {
+    return null;
+  }
+
+  if (/gradient\s*\(/i.test(value)) {
+    return { defaultValue: trimmed, type: "text", important };
+  }
+
+  if (isSimpleColorValue(value)) {
+    return { defaultValue: trimmed, type: "color", important };
+  }
+
+  return null;
+}
+
+function extractSelectorForIndex(css: string, propertyIndex: number): string | null {
+  const before = css.slice(0, propertyIndex);
+  const openIndex = before.lastIndexOf("{");
+  if (openIndex === -1) {
+    return null;
+  }
+
+  const beforeOpen = before.slice(0, openIndex);
+  const closeIndex = beforeOpen.lastIndexOf("}");
+  const rawSelector = before.slice(closeIndex + 1, openIndex).trim();
+  if (!rawSelector) {
+    return null;
+  }
+
+  const selector = rawSelector.split("{").pop() ?? rawSelector;
+  return selector.replace(/\s+/g, " ").trim();
+}
+
+function buildCssColorKeyBase(selector: string, property: string): string {
+  const normalizedSelector = selector.replace(/[#.]+/g, " ").replace(/\s+/g, " ").trim();
+  const combined = [normalizedSelector, property].filter(Boolean).join("_");
+  return sanitizeKey(combined);
+}
+
+function buildCssColorLabel(
+  selector: string,
+  property: string,
+  type: SchemaField["type"],
+): string {
+  const labelPrefix = type === "text" ? "Gradiente" : "Cor";
+  const propertyLabel = property === "color" ? "" : ` ${formatLabel(property)}`;
+  const selectorLabel = selector || "Regra";
+  return `${labelPrefix}${propertyLabel} (${selectorLabel})`;
+}
+
+function buildInlineColorKeyBase(element: Element, property: string): string {
+  const parts: string[] = [element.tagName.toLowerCase()];
+  if (element.id) {
+    parts.push(`id_${element.id}`);
+  }
+  const firstClass = element.classList.item(0);
+  if (firstClass) {
+    parts.push(`class_${firstClass}`);
+  }
+  parts.push(property.replace(/-+/g, "_"));
+  return sanitizeKey(parts.join("_"));
+}
+
+function buildInlineColorLabel(
+  element: Element,
+  property: string,
+  type: SchemaField["type"],
+): string {
+  const labelPrefix = type === "text" ? "Gradiente" : "Cor";
+  const propertyLabel = property === "color" ? "" : ` ${formatLabel(property)}`;
+  const descriptor = describeElementForColorLabel(element);
+  return `${labelPrefix}${propertyLabel} (${descriptor})`;
+}
+
+function describeElementForColorLabel(element: Element): string {
+  if (element.id) {
+    return `#${element.id}`;
+  }
+  const firstClass = element.classList.item(0);
+  if (firstClass) {
+    return `.${firstClass}`;
+  }
+  return element.tagName.toLowerCase();
+}
+
+function splitImportant(value: string): { value: string; important?: string } {
+  const match = value.match(/^(.*?)(!important)$/i);
+  if (match) {
+    return { value: match[1].trim(), important: "!important" };
+  }
+  return { value, important: undefined };
+}
+
+function isSimpleColorValue(value: string): boolean {
+  if (HEX_COLOR_REGEX.test(value)) {
+    return true;
+  }
+  if (RGB_COLOR_REGEX.test(value)) {
+    return true;
+  }
+  if (HSL_COLOR_REGEX.test(value)) {
+    return true;
+  }
+  if (COLOR_KEYWORDS.has(value.toLowerCase())) {
+    return true;
+  }
+  return false;
 }
 
 function buildFieldKey(owner: FieldOwnerContext, prefix: string): { key: string; index: number } {
