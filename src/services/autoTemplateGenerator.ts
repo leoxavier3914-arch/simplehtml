@@ -272,6 +272,7 @@ export function autoGenerateTemplate(
   ];
 
   if (styleGroups.length > 0) {
+    styleGroups.sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
     tabs.push({
       id: "auto-styles",
       label: "Estilos visuais",
