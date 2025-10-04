@@ -5,12 +5,13 @@ import { createPortal } from "react-dom";
 interface FloatingPreviewWindowProps {
   title: string;
   onClose: () => void;
+  variant?: "window" | "fullscreen";
 }
 
 const MIN_WIDTH = 320;
 const MIN_HEIGHT = 240;
 
-export function FloatingPreviewWindow({ title, onClose, children }: PropsWithChildren<FloatingPreviewWindowProps>) {
+export function FloatingPreviewWindow({ title, onClose, children, variant = "window" }: PropsWithChildren<FloatingPreviewWindowProps>) {
   const [position, setPosition] = useState({ x: 80, y: 80 });
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -28,6 +29,17 @@ export function FloatingPreviewWindow({ title, onClose, children }: PropsWithChi
   }, [container]);
 
   useEffect(() => {
+    if (variant !== "fullscreen") return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [variant]);
+
+  useEffect(() => {
+    if (variant !== "window") return;
+
     function handleMouseMove(event: MouseEvent) {
       if (isDragging) {
         const bounds = windowRef.current?.getBoundingClientRect();
@@ -76,9 +88,10 @@ export function FloatingPreviewWindow({ title, onClose, children }: PropsWithChi
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isDragging, isResizing, position.x, position.y, size.height, size.width]);
+  }, [isDragging, isResizing, position.x, position.y, size.height, size.width, variant]);
 
   function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (variant !== "window") return;
     if (event.button !== 0) return;
     const rect = windowRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -92,6 +105,7 @@ export function FloatingPreviewWindow({ title, onClose, children }: PropsWithChi
   }
 
   function handleResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (variant !== "window") return;
     if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
@@ -102,6 +116,23 @@ export function FloatingPreviewWindow({ title, onClose, children }: PropsWithChi
       width: size.width,
       height: size.height,
     };
+  }
+
+  if (variant === "fullscreen") {
+    return createPortal(
+      <div className="floating-window-overlay floating-window-overlay-fullscreen" role="dialog" aria-modal="true">
+        <div ref={windowRef} className="floating-window floating-window-fullscreen">
+          <header className="floating-window-title">
+            <span>{title}</span>
+            <button type="button" onClick={onClose} aria-label="Fechar preview">
+              ×
+            </button>
+          </header>
+          <div className="floating-window-content floating-window-content-fullscreen">{children}</div>
+        </div>
+      </div>,
+      container
+    );
   }
 
   return createPortal(
