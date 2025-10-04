@@ -1,6 +1,6 @@
 // ===============================================
 // INSTRUÇÕES RÁPIDAS: este arquivo já está pronto.
-// • Se você NÃO é programador(a), edite apenas o arquivo config.js
+// • Se você NÃO é programador(a), edite apenas o arquivo config.json
 // • Para trocar fotos, coloque imagens em assets/images (veja TUTORIAL.txt)
 // • Não precisa instalar nada. É só publicar a pasta no Netlify ou Vercel.
 // ===============================================

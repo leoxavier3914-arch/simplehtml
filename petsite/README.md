@@ -1,7 +1,7 @@
 
 # Configuração rápida (plug-and-play)
 
-1) **Abra `config.js`** e personalize:
+1) **Abra `config.json`** e personalize:
 - `siteName` e o objeto `brand` (nome que aparece no cabeçalho/rodapé)
 - `theme` com as cores base da página (ex.: `background: "#0f1f14"`, `primary: "#2aba8a"`, `secondary: "#a5e2c8"`).
   - Use hexadecimais (`#RRGGBB` ou `#RRGGBBAA` para transparências) e mantenha contraste mínimo de 4.5:1 entre `background`/`backgroundAccent` e `text`/`textSoft`.
@@ -33,6 +33,6 @@ assets/images/gallery/gallery-8.jpg  (1200x1200)
 
 3) **Publicar**: Netlify (arrastar pasta), Vercel, GitHub Pages ou Cloudflare Pages.
 
-> **Dica:** Ao usar o Netlify com o formulário nativo, personalize `thankYouPage` no `config.js`. Essa tela (`thanks.html`) é aberta automaticamente depois de cada envio.
+> **Dica:** Ao usar o Netlify com o formulário nativo, personalize `thankYouPage` no `config.json`. Essa tela (`thanks.html`) é aberta automaticamente depois de cada envio.
 
 > **Observação:** O design original foi mantido. Este pacote só adiciona configuração por arquivo e troca simples de imagens.
