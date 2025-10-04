@@ -862,29 +862,57 @@ function buildSectionSignature(element: Element): string | null {
     return null;
   }
 
-  const textContent = Array.from(element.querySelectorAll("a, button, span, li"))
-    .map((node) => node.textContent?.replace(/\s+/g, " ").trim().toLowerCase())
-    .filter((value): value is string => Boolean(value) && value.length <= 160);
+  const links = Array.from(element.querySelectorAll("a"))
+    .map((anchor) => {
+      const text = normalizeNavigationText(anchor.textContent);
+      const href = normalizeNavigationHref(anchor.getAttribute("href"));
+      if (!text && !href) {
+        return null;
+      }
+      return { text, href };
+    })
+    .filter((value): value is { text: string; href: string } => value !== null);
 
-  const hrefs = Array.from(element.querySelectorAll("a[href]"))
-    .map((anchor) => anchor.getAttribute("href")?.trim().toLowerCase())
-    .filter((value): value is string => Boolean(value));
+  const uniqueLinks: { text: string; href: string }[] = [];
+  const seen = new Set<string>();
 
-  if (textContent.length < 2 && hrefs.length < 2) {
+  links.forEach((link) => {
+    const key = `${link.text}|${link.href}`;
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    uniqueLinks.push(link);
+  });
+
+  if (uniqueLinks.length < 2) {
     return null;
   }
 
-  const textSignature = Array.from(new Set(textContent)).sort().join("|");
-  const hrefSignature = Array.from(new Set(hrefs)).sort().join("|");
-  const classes = Array.from(element.classList)
-    .map((cls) => cls.trim().toLowerCase())
-    .filter(Boolean)
-    .sort()
-    .join(".");
-  const role = element.getAttribute("role")?.toLowerCase() ?? "";
+  const orderedSignature = uniqueLinks
+    .map((link) => `${link.text || "<text>"}->${link.href || "<href>"}`)
+    .join("||");
+
   const tag = element.tagName.toLowerCase();
 
-  return `nav|${tag}|${role}|${classes}|${textSignature}|href:${hrefSignature}`;
+  return `nav|${tag}|${orderedSignature}`;
+}
+
+function normalizeNavigationText(value: string | null | undefined): string {
+  return value ? value.replace(/\s+/g, " ").trim().toLowerCase() : "";
+}
+
+function normalizeNavigationHref(value: string | null | undefined): string {
+  if (!value) {
+    return "";
+  }
+
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) {
+    return "";
+  }
+
+  return trimmed;
 }
 
 function isNavigationElement(element: Element): boolean {
