@@ -480,7 +480,7 @@ function transformCssFile(
   const styleGroup: SchemaGroup = {
     id: groupId,
     label: `${displayLabelForFile(file.path)} · Estilos`,
-    description: "Cores, gradientes e imagens detectadas automaticamente no CSS.",
+    description: `Cores, gradientes e imagens detectadas automaticamente no CSS do arquivo ${file.path}.`,
     fields: styleFields,
   };
 
@@ -1202,7 +1202,7 @@ function transformHtmlFile(
         {
           id: `${baseKey}-seo`,
           label: `${displayLabelForFile(file.path)} · SEO`,
-          description: "Metadados extraídos automaticamente.",
+          description: `Metadados extraídos automaticamente do arquivo ${file.path}.`,
           fields: seoFields,
         },
       ]
@@ -1213,7 +1213,7 @@ function transformHtmlFile(
         {
           id: `${schemaIdPrefix(`${baseKey}.inline-styles`)}-palette`,
           label: `${displayLabelForFile(file.path)} · Estilos`,
-          description: "Cores, gradientes e imagens detectadas automaticamente no HTML.",
+          description: `Cores, gradientes e imagens detectadas automaticamente no HTML do arquivo ${file.path}.`,
           fields: inlineStyleFields,
         },
       ]
@@ -2220,7 +2220,7 @@ function fallbackGeneration(templateLabel: string, originalFiles: TemplateFile[]
     groups.push({
       id: `auto-${sanitizeKey(file.path)}-raw`,
       label: displayLabelForFile(file.path),
-      description: "Edição direta do conteúdo HTML (fallback)",
+      description: `Edição direta do conteúdo HTML (fallback). Arquivo original: ${file.path}.`,
       fields: [
         {
           key: baseKey,
@@ -2288,7 +2288,11 @@ function deriveTemplateName(label: string): string {
 }
 
 function displayLabelForFile(path: string): string {
-  return `Arquivo: ${path}`;
+  const segments = path.split(/[\\/]/).filter(Boolean);
+  const lastSegment = segments.pop() ?? path;
+  const withoutExtension = lastSegment.replace(/\.[^/.]+$/, "");
+  const formatted = formatLabel(withoutExtension);
+  return formatted || "Arquivo";
 }
 
 function sanitizeFileSuffix(value: string): string {

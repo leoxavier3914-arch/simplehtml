@@ -59,17 +59,17 @@ describe("autoTemplateGenerator navigation deduplication", () => {
     const result = autoGenerateTemplate("Landing", files);
 
     const tabIds = result.schema.tabs.map((tab) => tab.id);
-    expect(tabIds).toContain("auto-se_o_1-arquivo_primeiro_html");
-    expect(tabIds).toContain("auto-se_o_1-arquivo_segundo_html");
+    expect(tabIds).toContain("auto-se_o_1-primeiro");
+    expect(tabIds).toContain("auto-se_o_1-segundo");
 
     const genericTabs = result.schema.tabs.filter((tab) =>
-      tab.id.startsWith("auto-se_o_1-arquivo_"),
+      tab.id.startsWith("auto-se_o_1-"),
     );
     expect(genericTabs).toHaveLength(2);
     expect(genericTabs.map((tab) => tab.label)).toEqual(
       expect.arrayContaining([
-        "Seção 1 · Arquivo: primeiro.html",
-        "Seção 1 · Arquivo: segundo.html",
+        "Seção 1 · Primeiro",
+        "Seção 1 · Segundo",
       ]),
     );
   });
