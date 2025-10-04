@@ -1846,6 +1846,17 @@ function normalizeNavigationHref(value: string | null | undefined): string {
 }
 
 function isNavigationElement(element: Element): boolean {
+  const menuScope = findNavigationScope(element, isMenuScope);
+  const footerScope = findNavigationScope(element, isFooterScope);
+
+  if (!menuScope && !footerScope) {
+    return false;
+  }
+
+  if (footerScope) {
+    return true;
+  }
+
   const tag = element.tagName.toLowerCase();
   if (tag === "nav") {
     return true;
@@ -1860,6 +1871,64 @@ function isNavigationElement(element: Element): boolean {
     const normalized = cls.trim().toLowerCase();
     return normalized.includes("nav") || normalized.includes("menu");
   });
+}
+
+function findNavigationScope(
+  element: Element,
+  predicate: (candidate: Element) => boolean,
+): Element | null {
+  let current: Element | null = element;
+  while (current) {
+    if (predicate(current)) {
+      return current;
+    }
+    current = current.parentElement;
+  }
+  return null;
+}
+
+function isMenuScope(element: Element): boolean {
+  const tag = element.tagName.toLowerCase();
+  if (tag === "header") {
+    return true;
+  }
+
+  const role = element.getAttribute("role")?.toLowerCase();
+  if (role === "banner") {
+    return true;
+  }
+
+  const descriptor = navigationDescriptor(element);
+  return (
+    descriptor.includes("header") ||
+    descriptor.includes("topbar") ||
+    descriptor.includes("menu") ||
+    descriptor.includes("navbar")
+  );
+}
+
+function isFooterScope(element: Element): boolean {
+  const tag = element.tagName.toLowerCase();
+  if (tag === "footer") {
+    return true;
+  }
+
+  const role = element.getAttribute("role")?.toLowerCase();
+  if (role === "contentinfo") {
+    return true;
+  }
+
+  const descriptor = navigationDescriptor(element);
+  return descriptor.includes("footer") || descriptor.includes("rodape");
+}
+
+function navigationDescriptor(element: Element): string {
+  const id = element.getAttribute("id") ?? "";
+  const classNames = Array.from(element.classList)
+    .map((cls) => cls.trim())
+    .filter(Boolean)
+    .join(" ");
+  return `${id} ${classNames}`.toLowerCase();
 }
 
 function deriveSectionMetadata(element: Element | null, index: number, file: TemplateFile): SectionMetadata {
