@@ -8,10 +8,23 @@ interface AutoTemplateResult {
   files: TemplateFile[];
 }
 
+interface GeneratedTab {
+  id: string;
+  label: string;
+  groups: SchemaGroup[];
+  order: number;
+}
+
 interface TransformResult {
   contents: string;
-  contentGroups: SchemaGroup[];
+  contentTabs: GeneratedTab[];
   seoGroups: SchemaGroup[];
+  hasFields: boolean;
+}
+
+interface CssTransformResult {
+  contents: string;
+  colorGroups: SchemaGroup[];
   hasFields: boolean;
 }
 
@@ -114,6 +127,20 @@ const SECTION_LABEL_HINTS: { pattern: RegExp; label: string }[] = [
   { pattern: /(blog|noticia|artigo)/i, label: "Blog" },
 ];
 
+const SECTION_TAB_HINTS: { pattern: RegExp; key: string; label: string }[] = [
+  { pattern: /(cardap|prato|gastronom|restaurante)/i, key: "cardapio", label: "Cardápio" },
+  { pattern: /(hero|masthead|banner|destaque)/i, key: "hero", label: "Hero" },
+  { pattern: /(header|topbar|navbar|navega|cabec|nav\b)/i, key: "navigation", label: "Navegação" },
+  { pattern: /(footer|rodape)/i, key: "footer", label: "Rodapé" },
+  { pattern: /(contact|contato|form)/i, key: "contato", label: "Contato" },
+  { pattern: /(about|sobre|historia|company)/i, key: "sobre", label: "Sobre" },
+  { pattern: /(service|servic|feature|benefit|solucao)/i, key: "servicos", label: "Serviços" },
+  { pattern: /(product|produto|catalog)/i, key: "produtos", label: "Produtos" },
+  { pattern: /(faq|pergunta|duvida)/i, key: "faq", label: "FAQ" },
+  { pattern: /(testimonial|depoimento|review)/i, key: "depoimentos", label: "Depoimentos" },
+  { pattern: /(pricing|plan|preco|assinatura)/i, key: "planos", label: "Planos" },
+];
+
 const CARD_LABEL_HINTS: { pattern: RegExp; label: string }[] = [
   { pattern: /(card|item|box|bloco)/i, label: "Card" },
   { pattern: /(feature|benefit|solucao)/i, label: "Diferencial" },
@@ -153,12 +180,27 @@ export function autoGenerateTemplate(
   }
 
   const defaults: Record<string, unknown> = {};
-  const contentGroups: SchemaGroup[] = [];
+  const contentTabMap = new Map<string, GeneratedTab>();
   const seoGroups: SchemaGroup[] = [];
+  const colorGroups: SchemaGroup[] = [];
   const processedFiles: TemplateFile[] = [];
   let hasFields = false;
 
   originalFiles.forEach((file) => {
+    if (isCssFile(file.path)) {
+      const baseKey = `auto.${sanitizeKey(file.path)}`;
+      const result = transformCssFile(file, baseKey, defaults);
+
+      processedFiles.push({ path: file.path, contents: result.contents });
+
+      if (result.hasFields) {
+        hasFields = true;
+        colorGroups.push(...result.colorGroups);
+      }
+
+      return;
+    }
+
     if (!isHtmlFile(file.path)) {
       processedFiles.push({ ...file });
       return;
@@ -171,7 +213,15 @@ export function autoGenerateTemplate(
 
     if (result.hasFields) {
       hasFields = true;
-      contentGroups.push(...result.contentGroups);
+      result.contentTabs.forEach((tab) => {
+        const existing = contentTabMap.get(tab.id);
+        if (existing) {
+          existing.groups.push(...tab.groups);
+          existing.order = Math.min(existing.order, tab.order);
+        } else {
+          contentTabMap.set(tab.id, { ...tab, groups: [...tab.groups] });
+        }
+      });
       seoGroups.push(...result.seoGroups);
     }
   });
@@ -180,21 +230,83 @@ export function autoGenerateTemplate(
     return fallbackGeneration(templateLabel, originalFiles);
   }
 
+  const contentTabs = Array.from(contentTabMap.values())
+    .map((tab) => ({ ...tab, groups: tab.groups.filter((group) => group.fields.length > 0) }))
+    .filter((tab) => tab.groups.length > 0)
+    .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label, "pt-BR"));
+
+  const tabs: SchemaTab[] = [
+    ...contentTabs.map((tab) => ({ id: tab.id, label: tab.label, groups: tab.groups })),
+  ];
+
+  if (colorGroups.length > 0) {
+    tabs.push({
+      id: "auto-styles",
+      label: "Cores",
+      groups: colorGroups,
+    });
+  }
+
+  tabs.push(...buildSeoTabs(seoGroups));
+  tabs.push(buildIntegrationsTab());
+
   const schema: TemplateSchema = {
     version: 1,
     templateName: deriveTemplateName(templateLabel),
-    tabs: [
-      {
-        id: "auto-content",
-        label: "Conteúdo",
-        groups: contentGroups,
-      },
-      ...buildSeoTabs(seoGroups),
-      buildIntegrationsTab(),
-    ],
+    tabs,
   };
 
   return { schema, config: defaults, files: processedFiles };
+}
+
+function transformCssFile(
+  file: TemplateFile,
+  baseKey: string,
+  defaults: Record<string, unknown>,
+): CssTransformResult {
+  const colorKeySet = new Set<string>();
+  const variableKeyMap = new Map<string, string>();
+  const colorFields: SchemaField[] = [];
+  const pattern = /(--[a-zA-Z0-9_-]+)(\s*:\s*)(#[0-9a-fA-F]{3,6})\b/g;
+
+  let contents = file.contents.replace(pattern, (match, varName: string, separator: string, colorValue: string) => {
+    let fieldKey = variableKeyMap.get(varName);
+
+    if (!fieldKey) {
+      const cleanedVar = sanitizeKey(varName.replace(/^--/, ""));
+      const uniqueVar = ensureUniqueKey(cleanedVar || "cor", colorKeySet, "cor");
+      fieldKey = `${baseKey}.colors.${uniqueVar}`;
+      variableKeyMap.set(varName, fieldKey);
+
+      const fieldLabelBase = formatLabel(varName.replace(/^--/, "")) || uniqueVar;
+      const field: SchemaField = {
+        key: fieldKey,
+        label: `Cor ${fieldLabelBase}`,
+        type: "color",
+        defaultValue: colorValue,
+        helperText: `Variável CSS ${varName}`,
+      };
+
+      colorFields.push(field);
+      setValue(fieldKey, defaults, colorValue);
+    }
+
+    return `${varName}${separator}{{${fieldKey}}}`;
+  });
+
+  if (!colorFields.length) {
+    return { contents: file.contents, colorGroups: [], hasFields: false };
+  }
+
+  const groupId = `${schemaIdPrefix(`${baseKey}.colors`)}-palette`;
+  const colorGroup: SchemaGroup = {
+    id: groupId,
+    label: `${displayLabelForFile(file.path)} · Cores`,
+    description: "Cores detectadas automaticamente no CSS.",
+    fields: colorFields,
+  };
+
+  return { contents, colorGroups: [colorGroup], hasFields: true };
 }
 
 function transformHtmlFile(
@@ -210,12 +322,12 @@ function transformHtmlFile(
   const doc = parser.parseFromString(htmlToParse, "text/html");
 
   if (!doc || doc.querySelector("parsererror")) {
-    return { contents, contentGroups: [], seoGroups: [], hasFields: false };
+    return { contents, contentTabs: [], seoGroups: [], hasFields: false };
   }
 
   const root: Element | null = isFragment ? doc.body : doc.documentElement;
   if (!root) {
-    return { contents, contentGroups: [], seoGroups: [], hasFields: false };
+    return { contents, contentTabs: [], seoGroups: [], hasFields: false };
   }
 
   const seoFields: SchemaField[] = [];
@@ -408,7 +520,7 @@ function transformHtmlFile(
     serialized = doctype ? `${doctype}\n${html}` : html;
   }
 
-  const contentGroups = buildContentGroups(sectionContexts, baseKey);
+  const contentTabs = buildSectionTabs(sectionContexts, baseKey);
   const seoGroups = seoFields.length
     ? [
         {
@@ -422,9 +534,11 @@ function transformHtmlFile(
 
   return {
     contents: serialized,
-    contentGroups,
+    contentTabs,
     seoGroups,
-    hasFields: contentGroups.length > 0 || seoGroups.length > 0,
+    hasFields:
+      contentTabs.some((tab) => tab.groups.some((group) => group.fields.length > 0)) ||
+      seoGroups.length > 0,
   };
 }
 
@@ -563,16 +677,28 @@ function buildHelperText(element: Element, section: SectionContext, card: CardCo
   return parts.join(" · ");
 }
 
-function buildContentGroups(sections: SectionContext[], keyPrefix: string): SchemaGroup[] {
+function buildSectionTabs(sections: SectionContext[], keyPrefix: string): GeneratedTab[] {
   const sortedSections = [...sections].sort((a, b) => a.order - b.order);
-  const groups: SchemaGroup[] = [];
   const groupPrefix = schemaIdPrefix(keyPrefix);
+  const tabMap = new Map<string, GeneratedTab>();
+  const labelUsage = new Map<string, number>();
 
   sortedSections.forEach((section) => {
+    const { tabId, tabLabel } = categorizeSectionTab(section.label);
+    const existingTab = tabMap.get(tabId);
+    const tab: GeneratedTab = existingTab
+      ? { ...existingTab, order: Math.min(existingTab.order, section.order) }
+      : { id: tabId, label: tabLabel, groups: [], order: section.order };
+
+    const usageKey = `${tabId}::${section.label}`;
+    const usageCount = (labelUsage.get(usageKey) ?? 0) + 1;
+    labelUsage.set(usageKey, usageCount);
+    const groupLabel = usageCount > 1 ? `${section.label} ${usageCount}` : section.label;
+
     if (section.fields.length > 0) {
-      groups.push({
+      tab.groups.push({
         id: `${groupPrefix}-${section.id}`,
-        label: section.label,
+        label: groupLabel,
         description: section.description,
         fields: section.fields,
       });
@@ -581,17 +707,29 @@ function buildContentGroups(sections: SectionContext[], keyPrefix: string): Sche
     const sortedCards = [...section.cards].sort((a, b) => a.order - b.order);
     sortedCards.forEach((card) => {
       if (card.fields.length > 0) {
-        groups.push({
+        tab.groups.push({
           id: `${groupPrefix}-${section.id}-${card.id}`,
-          label: `${section.label} · ${card.label}`,
+          label: `${groupLabel} · ${card.label}`,
           description: card.description,
           fields: card.fields,
         });
       }
     });
+
+    tabMap.set(tabId, tab);
   });
 
-  return groups;
+  return Array.from(tabMap.values()).sort(
+    (a, b) => a.order - b.order || a.label.localeCompare(b.label, "pt-BR"),
+  );
+}
+
+function categorizeSectionTab(label: string): { tabId: string; tabLabel: string } {
+  const normalized = label.toLowerCase();
+  const hint = SECTION_TAB_HINTS.find(({ pattern }) => pattern.test(normalized));
+  const tabKey = hint?.key ?? sanitizeKey(label) ?? "conteudo";
+  const tabLabel = hint?.label ?? (label || "Seção");
+  return { tabId: `auto-${tabKey}`, tabLabel };
 }
 
 function buildSeoTabs(seoGroups: SchemaGroup[]): SchemaTab[] {
@@ -986,6 +1124,10 @@ function sanitizeKey(value: string): string {
 
 function isHtmlFile(path: string): boolean {
   return /\.(html?|xhtml)$/i.test(path);
+}
+
+function isCssFile(path: string): boolean {
+  return /\.css$/i.test(path);
 }
 
 function formatDoctype(doctype: DocumentType | null): string {
