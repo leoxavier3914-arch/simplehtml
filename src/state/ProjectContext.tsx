@@ -12,6 +12,7 @@ import {
   loadTemplateFiles,
   loadTemplateFilesFromHandle,
 } from "@/services/templateLoader";
+import { autoGenerateTemplate } from "@/services/autoTemplateGenerator";
 import { setValue } from "@/utils/objectPaths";
 import { v4 as uuid } from "uuid";
 
@@ -105,16 +106,30 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       try {
         recordLog({ type: "info", message: `Carregando template em ${templatePath}` });
-        const [schema, defaults, files] = await Promise.all([
-          loadSchema(templatePath),
-          loadDefaultConfig(templatePath),
-          loadTemplateFiles(templatePath),
-        ]);
+        const originalFiles = await loadTemplateFiles(templatePath);
+        let files = originalFiles;
+        let schema: TemplateSchema;
+        let defaults: Record<string, unknown> | undefined;
 
-        const baseConfig = {
-          ...schemaDefaults(schema),
-          ...(defaults ?? {}),
-        };
+        try {
+          schema = await loadSchema(templatePath);
+          defaults = await loadDefaultConfig(templatePath);
+        } catch (schemaError) {
+          console.warn("Falha ao carregar schema.json, iniciando geração automática", schemaError);
+          recordLog({
+            type: "warning",
+            message: "schema.json ausente ou inválido. Gerando campos automaticamente.",
+          });
+          const generated = autoGenerateTemplate(templatePath, originalFiles);
+          schema = generated.schema;
+          defaults = generated.config;
+          files = generated.files;
+        }
+
+        const baseConfig = schemaDefaults(schema);
+        if (defaults) {
+          mergeDeep(baseConfig, defaults);
+        }
 
         const state: ProjectState = {
           name: schema.templateName,
@@ -144,16 +159,30 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       try {
         const templateLabel = handle.name ?? "template";
         recordLog({ type: "info", message: `Carregando template do navegador (${templateLabel})` });
-        const [schema, defaults, files] = await Promise.all([
-          loadSchemaFromHandle(handle),
-          loadDefaultConfigFromHandle(handle),
-          loadTemplateFilesFromHandle(handle),
-        ]);
+        const originalFiles = await loadTemplateFilesFromHandle(handle);
+        let files = originalFiles;
+        let schema: TemplateSchema;
+        let defaults: Record<string, unknown> | undefined;
 
-        const baseConfig = {
-          ...schemaDefaults(schema),
-          ...(defaults ?? {}),
-        };
+        try {
+          schema = await loadSchemaFromHandle(handle);
+          defaults = await loadDefaultConfigFromHandle(handle);
+        } catch (schemaError) {
+          console.warn("Falha ao carregar schema.json do diretório selecionado, gerando automaticamente", schemaError);
+          recordLog({
+            type: "warning",
+            message: "schema.json ausente ou inválido. Gerando campos automaticamente.",
+          });
+          const generated = autoGenerateTemplate(templateLabel, originalFiles);
+          schema = generated.schema;
+          defaults = generated.config;
+          files = generated.files;
+        }
+
+        const baseConfig = schemaDefaults(schema);
+        if (defaults) {
+          mergeDeep(baseConfig, defaults);
+        }
 
         const state: ProjectState = {
           name: schema.templateName,

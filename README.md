@@ -59,6 +59,14 @@ npm run tauri:build
 /template-exemplo  # Template HTML/CSS/JS de exemplo com schema/config
 ```
 
+## Importação automática de landing pages
+
+Agora é possível selecionar qualquer pasta com uma landing page estática (HTML/CSS/JS) mesmo que ela não possua
+`schema.json` ou `config.json`. O Studio analisa os arquivos HTML, gera placeholders nos textos, imagens, links e metas,
+monta um schema com campos correspondentes e cria um `config` inicial com os valores encontrados. Caso não seja possível
+identificar campos específicos, ele cria um fallback permitindo editar o HTML bruto diretamente. Isso vale tanto para
+pastas locais quanto para diretórios escolhidos pelo picker do navegador.
+
 ## Testes futuros
 
 - Integrações adicionais (Vercel, Cloudflare Pages) // TODO
