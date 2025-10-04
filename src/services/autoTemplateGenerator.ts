@@ -333,6 +333,7 @@ function transformHtmlFile(
   const seoFields: SchemaField[] = [];
   const sectionContexts: SectionContext[] = [];
   const sectionMap = new Map<Element, SectionContext>();
+  const sectionSignatureMap = new Map<string, SectionContext>();
   const sectionKeySet = new Set<string>();
   const cardKeySet = new Set<string>();
   const cardMap = new Map<Element, CardContext>();
@@ -396,6 +397,7 @@ function transformHtmlFile(
       sectionContexts,
       baseKey,
       file,
+      sectionSignatureMap,
     });
     const card = getCardContext(parent, section, {
       cardKeySet,
@@ -443,6 +445,7 @@ function transformHtmlFile(
       sectionContexts,
       baseKey,
       file,
+      sectionSignatureMap,
     });
     const card = getCardContext(img, section, {
       cardKeySet,
@@ -484,6 +487,7 @@ function transformHtmlFile(
       sectionContexts,
       baseKey,
       file,
+      sectionSignatureMap,
     });
     const card = getCardContext(anchor, section, {
       cardKeySet,
@@ -548,6 +552,7 @@ interface SectionContextOptions {
   sectionContexts: SectionContext[];
   baseKey: string;
   file: TemplateFile;
+  sectionSignatureMap: Map<string, SectionContext>;
 }
 
 interface CardContextOptions {
@@ -568,11 +573,23 @@ interface CardMetadata {
 }
 
 function getSectionContext(element: Element, options: SectionContextOptions): SectionContext {
-  const { sectionMap, sectionKeySet, sectionContexts, baseKey, file } = options;
+  const { sectionMap, sectionKeySet, sectionContexts, baseKey, file, sectionSignatureMap } = options;
   const sectionElement = findSectionElement(element);
-  const existing = sectionElement ? sectionMap.get(sectionElement) : undefined;
-  if (existing) {
-    return existing;
+  let signature: string | null = null;
+  if (sectionElement) {
+    const existing = sectionMap.get(sectionElement);
+    if (existing) {
+      return existing;
+    }
+
+    signature = buildSectionSignature(sectionElement);
+    if (signature) {
+      const duplicate = sectionSignatureMap.get(signature);
+      if (duplicate) {
+        sectionMap.set(sectionElement, duplicate);
+        return duplicate;
+      }
+    }
   }
 
   const index = sectionContexts.length + 1;
@@ -594,6 +611,9 @@ function getSectionContext(element: Element, options: SectionContextOptions): Se
   sectionContexts.push(context);
   if (sectionElement) {
     sectionMap.set(sectionElement, context);
+    if (signature && !sectionSignatureMap.has(signature)) {
+      sectionSignatureMap.set(signature, context);
+    }
   }
 
   return context;
@@ -835,6 +855,53 @@ function findSectionElement(element: Element): Element | null {
   }
 
   return element;
+}
+
+function buildSectionSignature(element: Element): string | null {
+  if (!isNavigationElement(element)) {
+    return null;
+  }
+
+  const textContent = Array.from(element.querySelectorAll("a, button, span, li"))
+    .map((node) => node.textContent?.replace(/\s+/g, " ").trim().toLowerCase())
+    .filter((value): value is string => Boolean(value) && value.length <= 160);
+
+  const hrefs = Array.from(element.querySelectorAll("a[href]"))
+    .map((anchor) => anchor.getAttribute("href")?.trim().toLowerCase())
+    .filter((value): value is string => Boolean(value));
+
+  if (textContent.length < 2 && hrefs.length < 2) {
+    return null;
+  }
+
+  const textSignature = Array.from(new Set(textContent)).sort().join("|");
+  const hrefSignature = Array.from(new Set(hrefs)).sort().join("|");
+  const classes = Array.from(element.classList)
+    .map((cls) => cls.trim().toLowerCase())
+    .filter(Boolean)
+    .sort()
+    .join(".");
+  const role = element.getAttribute("role")?.toLowerCase() ?? "";
+  const tag = element.tagName.toLowerCase();
+
+  return `nav|${tag}|${role}|${classes}|${textSignature}|href:${hrefSignature}`;
+}
+
+function isNavigationElement(element: Element): boolean {
+  const tag = element.tagName.toLowerCase();
+  if (tag === "nav") {
+    return true;
+  }
+
+  const role = element.getAttribute("role")?.toLowerCase();
+  if (role === "navigation") {
+    return true;
+  }
+
+  return Array.from(element.classList).some((cls) => {
+    const normalized = cls.trim().toLowerCase();
+    return normalized.includes("nav") || normalized.includes("menu");
+  });
 }
 
 function deriveSectionMetadata(element: Element | null, index: number, file: TemplateFile): SectionMetadata {
