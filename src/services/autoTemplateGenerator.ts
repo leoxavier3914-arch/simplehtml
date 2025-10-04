@@ -109,9 +109,20 @@ const CARD_KEYWORDS = [
   "servico",
 ];
 
-const SECTION_LABEL_HINTS: { pattern: RegExp; label: string }[] = [
+type SectionLabelHint = { pattern: RegExp; label: string; predicate?: (element: Element) => boolean };
+
+const SECTION_LABEL_HINTS: SectionLabelHint[] = [
   { pattern: /(hero|masthead|banner)/i, label: "Hero" },
-  { pattern: /(header|topbar|navbar|menu|nav)/i, label: "Navegação" },
+  {
+    pattern: /(header|topbar|navbar|nav\b|menu)/i,
+    label: "Navegação",
+    predicate: (element) => isNavigationElement(element),
+  },
+  {
+    pattern: /(cardap|combo|prato|gastronom|menu)/i,
+    label: "Cardápio",
+    predicate: (element) => !isNavigationElement(element),
+  },
   { pattern: /(footer|rodape|credits)/i, label: "Rodapé" },
   { pattern: /(contact|contato|form)/i, label: "Contato" },
   { pattern: /(about|sobre|historia|company)/i, label: "Sobre" },
@@ -898,10 +909,21 @@ function isNavigationElement(element: Element): boolean {
     return true;
   }
 
-  return Array.from(element.classList).some((cls) => {
-    const normalized = cls.trim().toLowerCase();
-    return normalized.includes("nav") || normalized.includes("menu");
-  });
+  const classes = Array.from(element.classList)
+    .map((cls) => cls.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (classes.some((cls) => cls.includes("nav"))) {
+    return true;
+  }
+
+  const hasMenuKeyword = classes.some((cls) => cls.includes("menu"));
+  if (!hasMenuKeyword) {
+    return false;
+  }
+
+  const navLikeTags = new Set(["nav", "header", "aside", "menu"]);
+  return role === "navigation" || navLikeTags.has(tag);
 }
 
 function deriveSectionMetadata(element: Element | null, index: number, file: TemplateFile): SectionMetadata {
@@ -915,7 +937,9 @@ function deriveSectionMetadata(element: Element | null, index: number, file: Tem
   }
 
   const descriptor = getElementDescriptor(element);
-  const hint = SECTION_LABEL_HINTS.find(({ pattern }) => pattern.test(descriptor));
+  const hint = SECTION_LABEL_HINTS.find(
+    ({ pattern, predicate }) => pattern.test(descriptor) && (!predicate || predicate(element)),
+  );
   if (hint) {
     const label = hint.label;
     return {
