@@ -4,6 +4,70 @@ import type { TemplateSchema } from "@/types/schema";
 
 const RESERVED_FILES = new Set(["schema.json", "config.json", "config.sample.json"]);
 
+type DirectoryHandle = FileSystemDirectoryHandle;
+type FileHandle = FileSystemFileHandle;
+type GenericHandle = FileSystemHandle & { name?: string };
+
+async function readFileFromHandle(handle: FileHandle): Promise<string> {
+  const file = await handle.getFile();
+  return file.text();
+}
+
+async function* iterateDirectory(
+  directory: DirectoryHandle,
+): AsyncGenerator<[string, FileSystemHandle]> {
+  const iterator = directory as unknown as {
+    entries?: () => AsyncIterableIterator<[string, FileSystemHandle]>;
+    values?: () => AsyncIterableIterator<FileSystemHandle>;
+    [Symbol.asyncIterator]?: () => AsyncIterableIterator<FileSystemHandle>;
+  };
+
+  if (iterator.entries) {
+    for await (const entry of iterator.entries()) {
+      yield entry;
+    }
+    return;
+  }
+
+  if (iterator.values) {
+    for await (const entry of iterator.values()) {
+      const handle = entry as GenericHandle;
+      yield [handle.name ?? "", entry];
+    }
+    return;
+  }
+
+  const asyncIterator = iterator[Symbol.asyncIterator];
+  if (asyncIterator) {
+    let index = 0;
+    for await (const entry of asyncIterator.call(iterator)) {
+      const handle = entry as GenericHandle;
+      const name = handle.name ?? `entry-${index++}`;
+      yield [name, entry];
+    }
+  }
+}
+
+async function findFileHandle(directory: DirectoryHandle, fileName: string): Promise<FileHandle | undefined> {
+  if ("getFileHandle" in directory) {
+    try {
+      return await directory.getFileHandle(fileName);
+    } catch (error) {
+      if ((error as DOMException).name !== "NotFoundError") {
+        throw error;
+      }
+    }
+  }
+
+  for await (const [name, entry] of iterateDirectory(directory)) {
+    if (entry.kind === "file" && name === fileName) {
+      return entry as FileHandle;
+    }
+  }
+
+  return undefined;
+}
+
 type FsEntry = {
   name: string;
   path: string;
@@ -60,4 +124,53 @@ export async function loadDefaultConfig(templatePath: string): Promise<Record<st
     console.warn("Nenhum config.json encontrado, iniciando vazio", error);
     return undefined;
   }
+}
+
+export async function loadTemplateFilesFromHandle(handle: DirectoryHandle): Promise<TemplateFile[]> {
+  const files: TemplateFile[] = [];
+
+  async function walk(directory: DirectoryHandle, prefix: string) {
+    for await (const [name, entry] of iterateDirectory(directory)) {
+      if (entry.kind === "directory") {
+        await walk(entry as DirectoryHandle, `${prefix}${name}/`);
+        continue;
+      }
+
+      if (entry.kind === "file") {
+        const fileHandle = entry as FileHandle;
+        if (RESERVED_FILES.has(name)) {
+          continue;
+        }
+
+        const contents = await readFileFromHandle(fileHandle);
+        files.push({ path: `${prefix}${name}`, contents });
+      }
+    }
+  }
+
+  await walk(handle, "");
+
+  return files;
+}
+
+export async function loadSchemaFromHandle(handle: DirectoryHandle): Promise<TemplateSchema> {
+  const fileHandle = await findFileHandle(handle, "schema.json");
+  if (!fileHandle) {
+    throw new Error("schema.json não encontrado no diretório selecionado");
+  }
+
+  const contents = await readFileFromHandle(fileHandle);
+  return JSON.parse(contents) as TemplateSchema;
+}
+
+export async function loadDefaultConfigFromHandle(
+  handle: DirectoryHandle,
+): Promise<Record<string, unknown> | undefined> {
+  const fileHandle = await findFileHandle(handle, "config.json");
+  if (!fileHandle) {
+    return undefined;
+  }
+
+  const contents = await readFileFromHandle(fileHandle);
+  return JSON.parse(contents) as Record<string, unknown>;
 }
